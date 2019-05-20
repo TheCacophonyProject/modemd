@@ -1,0 +1,13 @@
+modems:
+  - name: "Huawei 4G modem"
+    netdev: "eth1"
+    vendor-product: "12d1:14db"
+  - name: "Spark 3G modem"
+    netdev: "usb0"
+    vendor-product: "19d2:1405"
+test-hosts:
+  - "8.8.8.8"
+  - "8.8.4.4"
+test-interval: 300
+power-pin: "GPIO22"
+modem-power-on-time: 60
