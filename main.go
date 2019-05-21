@@ -19,14 +19,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
-	"fmt"
 	"log"
-	"os/exec"
 	"time"
 
 	arg "github.com/alexflint/go-arg"
-	"periph.io/x/periph/conn/gpio"
-	"periph.io/x/periph/conn/gpio/gpioreg"
 	"periph.io/x/periph/host"
 )
 
@@ -78,113 +74,77 @@ func runMain() error {
 	log.Printf("%+v\n", conf)
 
 	mc := ModemController{
-		startTime:     time.Now(),
-		InitialOnTime: 60,
+		StartTime:         time.Now(),
+		ModemsConfig:      conf.ModemsConfig,
+		TestHosts:         conf.TestHosts,
+		TestInterval:      conf.TestInterval,
+		PowerPin:          conf.PowerPin,
+		InitialOnTime:     conf.InitialOnTime,
+		FindModemTime:     conf.FindModemTime,
+		ConnectionTimeout: conf.ConnectionTimeout,
+		PingWaitTime:      conf.PingWaitTime,
+		PingRetries:       conf.PingRetries,
 	}
 
 	if mc.ShouldBeOff() || args.RestartModem {
-		setModemPower(false, conf.PowerPin)
+		log.Println("powering off USB modem")
+		mc.SetModemPower(false)
+		time.Sleep(time.Second * 5)
 	}
 
 	for {
 		if mc.ShouldBeOff() {
 			log.Println("waiting until modem shoudl be powered on")
 			for mc.ShouldBeOff() {
-				time.Sleep(time.Second * 5)
+				time.Sleep(time.Second)
 			}
 		}
 
 		log.Println("powering on USB modem")
-		setModemPower(true, conf.PowerPin)
+		mc.SetModemPower(true)
 
 		log.Println("finding USB modem")
-		for {
-			mc.Modem = findModem(60, conf.ModemsConfig)
-			if mc.Modem != nil {
+		for !mc.ShouldBeOff() {
+			if mc.FindModem() {
 				log.Printf("found modem %s\n", mc.Modem.Name)
 				break
 			}
 			log.Println("no USB modem found")
-			cycleModemPower(conf.PowerPin)
+			mc.CycleModemPower()
 		}
 
-		log.Println("waiting for modem to connect to network")
-		connected, err := mc.Modem.WaitForConnection(300)
+		log.Println("waiting for modem to connect to a network")
+		connected, err := mc.WaitForConnection()
 		if err != nil {
 			return err
 		}
 		if connected {
-			log.Println("modem has connected to network")
+			log.Println("modem has connected to a network")
 			for {
-				if mc.ShouldBeOff() {
-					log.Println("modem should no longer be on")
-					break
-				}
-
-				if mc.Modem.PingTest(5, 30, conf.TestHosts) {
+				if mc.PingTest() {
 					log.Println("ping test passed")
 				} else {
 					log.Println("ping test failed")
 					break
 				}
-
-				newPingTime := time.Now().Add(time.Duration(conf.TestInterval) * time.Second)
-				for newPingTime.After(time.Now()) {
-					if mc.ShouldBeOff() {
-						log.Println("modem should no longer be on")
-						break
-					}
-					time.Sleep(time.Second * 5)
+				if !mc.WaitForNextPingTest() {
+					break
 				}
 			}
-
 		} else {
-			log.Println("modem failed to connect to netowrk")
+			log.Println("modem failed to connect to a network")
 		}
+
 		mc.Modem = nil
 
+		if mc.ShouldBeOff() {
+			log.Println("modem should no longer be on")
+		}
+
 		log.Println("powering off USB modem")
-		setModemPower(false, conf.PowerPin)
+		mc.SetModemPower(false)
 		time.Sleep(time.Second * 5) // ensure modem is fully powered off
 	}
 
-	return nil
-}
-
-func findModem(timeout int, modemsConfig []ModemConfig) *Modem {
-	start := time.Now()
-	for {
-		for _, modemConfig := range modemsConfig {
-			cmd := exec.Command("lsusb", "-d", modemConfig.VendorProduct)
-			if err := cmd.Run(); err == nil {
-				return NewModem(modemConfig)
-			}
-		}
-		if time.Now().Sub(start) > time.Second*time.Duration(timeout) {
-			return nil
-		}
-		time.Sleep(time.Second)
-	}
-}
-
-func cycleModemPower(pinName string) error {
-	if err := setModemPower(false, pinName); err != nil {
-		return err
-	}
-	time.Sleep(time.Second * 5)
-	return setModemPower(true, pinName)
-}
-
-func setModemPower(on bool, pinName string) error {
-	pin := gpioreg.ByName(pinName)
-	if on {
-		if err := pin.Out(gpio.High); err != nil {
-			return fmt.Errorf("failed to set modem power pin high: %v", err)
-		}
-	} else {
-		if err := pin.Out(gpio.Low); err != nil {
-			return fmt.Errorf("failed to set modem power pin low: %v", err)
-		}
-	}
 	return nil
 }

@@ -11,3 +11,8 @@ test-hosts:
 test-interval: 300
 power-pin: "GPIO22"
 modem-power-on-time: 60
+initial-on-time: 120
+find-modem-time: 60
+connection-timeout: 30
+ping-wait-time: 30
+ping-retries: 5

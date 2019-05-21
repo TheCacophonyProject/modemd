@@ -25,11 +25,16 @@ import (
 )
 
 type ModemdConfig struct {
-	ModemsConfig     []ModemConfig `yaml:"modems"`
-	TestHosts        []string      `yaml:"test-hosts"`
-	TestInterval     int           `yaml:"test-interval"`
-	PowerPin         string        `yaml:"power-pin"`
-	ModemPowerOnTime int           `yaml:"modem-power-on-time"`
+	ModemsConfig      []ModemConfig `yaml:"modems"`
+	TestHosts         []string      `yaml:"test-hosts"`
+	TestInterval      int           `yaml:"test-interval"`
+	PowerPin          string        `yaml:"power-pin"`
+	ModemPowerOnTime  int           `yaml:"modem-power-on-time"`
+	InitialOnTime     int           `yaml:"initial-on-time"`
+	FindModemTime     int           `yaml:"find-modem-time"`
+	ConnectionTimeout int           `yaml:"connection-timeout"`
+	PingWaitTime      int           `yaml:"ping-wait-time"`
+	PingRetries       int           `yaml:"ping-retries"`
 }
 
 type ModemConfig struct {
