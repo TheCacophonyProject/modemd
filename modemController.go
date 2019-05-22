@@ -20,6 +20,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"time"
 
@@ -39,8 +40,14 @@ type ModemController struct {
 	ConnectionTimeout int // Time in seconds for modem to make a connection to the network
 	PingWaitTime      int
 	PingRetries       int
+	RequestOnTime     int // Time the modem will stay on in seconds after a request was made
 
-	lastPingTime time.Time
+	lastOnRequestTime time.Time
+}
+
+func (mc *ModemController) NewOnRequest() {
+	log.Println("stay on request")
+	mc.lastOnRequestTime = time.Now()
 }
 
 func (mc *ModemController) FindModem() bool {
@@ -110,6 +117,11 @@ func (mc *ModemController) ShouldBeOff() bool {
 	if !timeoutCheck(mc.StartTime, mc.InitialOnTime) {
 		return false
 	}
+
+	if !timeoutCheck(mc.lastOnRequestTime, mc.RequestOnTime) {
+		return false
+	}
+
 	return true
 }
 

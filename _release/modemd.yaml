@@ -16,3 +16,4 @@ find-modem-time: 60
 connection-timeout: 30
 ping-wait-time: 30
 ping-retries: 5
+request-on-time: 60

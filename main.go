@@ -84,6 +84,12 @@ func runMain() error {
 		ConnectionTimeout: conf.ConnectionTimeout,
 		PingWaitTime:      conf.PingWaitTime,
 		PingRetries:       conf.PingRetries,
+		RequestOnTime:     conf.RequestOnTime,
+	}
+
+	log.Println("starting dbus service")
+	if err := startService(&mc); err != nil {
+		return err
 	}
 
 	if mc.ShouldBeOff() || args.RestartModem {

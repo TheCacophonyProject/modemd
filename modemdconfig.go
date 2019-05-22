@@ -35,6 +35,7 @@ type ModemdConfig struct {
 	ConnectionTimeout int           `yaml:"connection-timeout"`
 	PingWaitTime      int           `yaml:"ping-wait-time"`
 	PingRetries       int           `yaml:"ping-retries"`
+	RequestOnTime     int           `yaml:"request-on-time"`
 }
 
 type ModemConfig struct {
