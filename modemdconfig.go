@@ -29,7 +29,6 @@ type ModemdConfig struct {
 	TestHosts         []string      `yaml:"test-hosts"`
 	TestInterval      int           `yaml:"test-interval"`
 	PowerPin          string        `yaml:"power-pin"`
-	ModemPowerOnTime  int           `yaml:"modem-power-on-time"`
 	InitialOnTime     int           `yaml:"initial-on-time"`
 	FindModemTime     int           `yaml:"find-modem-time"`
 	ConnectionTimeout int           `yaml:"connection-timeout"`

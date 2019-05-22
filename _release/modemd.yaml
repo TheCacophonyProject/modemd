@@ -10,7 +10,6 @@ test-hosts:
   - "8.8.4.4"
 test-interval: 300
 power-pin: "GPIO22"
-modem-power-on-time: 60
 initial-on-time: 120
 find-modem-time: 60
 connection-timeout: 30
