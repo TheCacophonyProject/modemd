@@ -18,6 +18,17 @@
   version = "v1.0.0"
 
 [[projects]]
+  digest = "1:845b7e5613e043a3c519bc380295688b7e69ec2e3f211606fa2d028b5adf2e53"
+  name = "github.com/godbus/dbus"
+  packages = [
+    ".",
+    "introspect",
+  ]
+  pruneopts = "UT"
+  revision = "2ff6f7ffd60f0f2410b3105864bdd12c7894f844"
+  version = "v5.0.1"
+
+[[projects]]
   digest = "1:4d2e5a73dc1500038e504a8d78b986630e3626dc027bc030ba5c75da257cdb96"
   name = "gopkg.in/yaml.v2"
   packages = ["."]
@@ -68,6 +79,8 @@
   analyzer-version = 1
   input-imports = [
     "github.com/alexflint/go-arg",
+    "github.com/godbus/dbus",
+    "github.com/godbus/dbus/introspect",
     "gopkg.in/yaml.v2",
     "periph.io/x/periph/conn/gpio",
     "periph.io/x/periph/conn/gpio/gpioreg",
