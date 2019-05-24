@@ -50,7 +50,7 @@ func ParseModemdConfig(filename string) (*ModemdConfig, error) {
 		return nil, err
 	}
 	conf := &ModemdConfig{}
-	if err := yaml.Unmarshal(buf, &conf); err != nil {
+	if err := yaml.Unmarshal(buf, conf); err != nil {
 		return nil, err
 	}
 	return conf, nil

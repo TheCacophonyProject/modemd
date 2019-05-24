@@ -78,6 +78,7 @@ func (mc *ModemController) SetModemPower(on bool) error {
 		if err := pin.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
+		time.Sleep(time.Second * 5)
 	}
 	return nil
 }
@@ -86,7 +87,6 @@ func (mc *ModemController) CycleModemPower() error {
 	if err := mc.SetModemPower(false); err != nil {
 		return err
 	}
-	time.Sleep(time.Second * 5)
 	return mc.SetModemPower(true)
 }
 
@@ -110,9 +110,9 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 	}
 }
 
-// ShouldBeOff will look at the following factors to determine if the modem shoudl be off.
-// - InitialOnTime: Modem shoudl be on for a set amount of time at the start.
-// - LastOnRequest: //TODO
+// ShouldBeOff will look at the following factors to determine if the modem should be off.
+// - InitialOnTime: Modem should be on for a set amount of time at the start.
+// - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
 func (mc *ModemController) ShouldBeOff() bool {
 	if !timeoutCheck(mc.StartTime, mc.InitialOnTime) {

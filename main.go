@@ -44,8 +44,9 @@ func (Args) Version() string {
 }
 
 func procArgs() Args {
-	var args Args
-	args.ConfigFile = "/etc/cacophony/modemd.yaml"
+	args := Args{
+		ConfigFile: "/etc/cacophony/modemd.yaml",
+	}
 	arg.MustParse(&args)
 	return args
 }
@@ -95,12 +96,11 @@ func runMain() error {
 	if mc.ShouldBeOff() || args.RestartModem {
 		log.Println("powering off USB modem")
 		mc.SetModemPower(false)
-		time.Sleep(time.Second * 5)
 	}
 
 	for {
 		if mc.ShouldBeOff() {
-			log.Println("waiting until modem shoudl be powered on")
+			log.Println("waiting until modem should be powered on")
 			for mc.ShouldBeOff() {
 				time.Sleep(time.Second)
 			}
@@ -151,7 +151,6 @@ func runMain() error {
 
 		log.Println("powering off USB modem")
 		mc.SetModemPower(false)
-		time.Sleep(time.Second * 5) // ensure modem is fully powered off
 	}
 
 	return nil
