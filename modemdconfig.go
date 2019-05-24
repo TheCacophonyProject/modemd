@@ -20,6 +20,7 @@ package main
 
 import (
 	"io/ioutil"
+	"time"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -27,14 +28,14 @@ import (
 type ModemdConfig struct {
 	ModemsConfig      []ModemConfig `yaml:"modems"`
 	TestHosts         []string      `yaml:"test-hosts"`
-	TestInterval      int           `yaml:"test-interval"`
+	TestInterval      time.Duration `yaml:"test-interval"`
 	PowerPin          string        `yaml:"power-pin"`
-	InitialOnTime     int           `yaml:"initial-on-time"`
-	FindModemTime     int           `yaml:"find-modem-time"`
-	ConnectionTimeout int           `yaml:"connection-timeout"`
-	PingWaitTime      int           `yaml:"ping-wait-time"`
+	InitialOnTime     time.Duration `yaml:"initial-on-time"`
+	FindModemTime     time.Duration `yaml:"find-modem-time"`
+	ConnectionTimeout time.Duration `yaml:"connection-timeout"`
+	PingWaitTime      time.Duration `yaml:"ping-wait-time"`
 	PingRetries       int           `yaml:"ping-retries"`
-	RequestOnTime     int           `yaml:"request-on-time"`
+	RequestOnTime     time.Duration `yaml:"request-on-time"`
 }
 
 type ModemConfig struct {

@@ -33,14 +33,14 @@ type ModemController struct {
 	Modem             *Modem
 	ModemsConfig      []ModemConfig
 	TestHosts         []string
-	TestInterval      int
+	TestInterval      time.Duration
 	PowerPin          string
-	InitialOnTime     int
-	FindModemTime     int // Time in seconds after USB powered on for the modem to be found
-	ConnectionTimeout int // Time in seconds for modem to make a connection to the network
-	PingWaitTime      int
+	InitialOnTime     time.Duration
+	FindModemTime     time.Duration // Time in seconds after USB powered on for the modem to be found
+	ConnectionTimeout time.Duration // Time in seconds for modem to make a connection to the network
+	PingWaitTime      time.Duration
 	PingRetries       int
-	RequestOnTime     int // Time the modem will stay on in seconds after a request was made
+	RequestOnTime     time.Duration // Time the modem will stay on in seconds after a request was made
 
 	lastOnRequestTime time.Time
 }
@@ -51,19 +51,20 @@ func (mc *ModemController) NewOnRequest() {
 }
 
 func (mc *ModemController) FindModem() bool {
-	startTime := time.Now()
+	timeout := time.After(mc.FindModemTime)
 	for {
-		for _, modemConfig := range mc.ModemsConfig {
-			cmd := exec.Command("lsusb", "-d", modemConfig.VendorProduct)
-			if err := cmd.Run(); err == nil {
-				mc.Modem = NewModem(modemConfig)
-				return true
+		select {
+		case <-timeout:
+			return false
+		case <-time.After(time.Second):
+			for _, modemConfig := range mc.ModemsConfig {
+				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProduct)
+				if err := cmd.Run(); err == nil {
+					mc.Modem = NewModem(modemConfig)
+					return true
+				}
 			}
 		}
-		if timeoutCheck(startTime, mc.FindModemTime) {
-			return false
-		}
-		time.Sleep(time.Second)
 	}
 }
 
@@ -92,21 +93,21 @@ func (mc *ModemController) CycleModemPower() error {
 // WaitForConnection will return false if no connection is made before either
 // it timeouts or the modem should no longer be powered.
 func (mc *ModemController) WaitForConnection() (bool, error) {
-	startTime := time.Now()
+	timeout := time.After(mc.ConnectionTimeout)
 	for {
-		def, err := mc.Modem.IsDefaultRoute()
-		if err != nil {
-			return false, err
-		}
-		if def {
-			return true, nil
-		}
-		if timeoutCheck(startTime, mc.ConnectionTimeout) {
+		select {
+		case <-timeout:
 			return false, nil
+		case <-time.After(time.Second):
+			def, err := mc.Modem.IsDefaultRoute()
+			if err != nil {
+				return false, err
+			}
+			if def {
+				return true, nil
+			}
 		}
-		time.Sleep(time.Second)
 	}
-	return false, nil
 }
 
 // ShouldBeOff will look at the following factors to determine if the modem shoudl be off.
@@ -128,22 +129,24 @@ func (mc *ModemController) ShouldBeOff() bool {
 // WaitForNextPingTest will return false if when waiting ShouldBeOff returns
 // true, otherwise will return true after waiting.
 func (mc *ModemController) WaitForNextPingTest() bool {
-	startTime := time.Now()
+	timeout := time.After(mc.TestInterval)
 	for {
-		if timeoutCheck(startTime, mc.TestInterval) {
+		select {
+		case <-timeout:
 			return true
-		}
-		time.Sleep(time.Second)
-		if mc.ShouldBeOff() {
-			return false
+		case <-time.After(time.Second):
+			if mc.ShouldBeOff() {
+				return false
+			}
 		}
 	}
 }
 
 func (mc *ModemController) PingTest() bool {
-	return mc.Modem.PingTest(mc.PingWaitTime, mc.PingRetries, mc.TestHosts)
+	seconds := int(mc.PingWaitTime / time.Second)
+	return mc.Modem.PingTest(seconds, mc.PingRetries, mc.TestHosts)
 }
 
-func timeoutCheck(startTime time.Time, timeout int) bool {
-	return time.Now().Sub(startTime) > time.Second*time.Duration(timeout)
+func timeoutCheck(startTime time.Time, timeout time.Duration) bool {
+	return time.Now().Sub(startTime) > timeout
 }

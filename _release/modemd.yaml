@@ -8,11 +8,11 @@ modems:
 test-hosts:
   - "8.8.8.8"
   - "8.8.4.4"
-test-interval: 300
+test-interval: 5m
 power-pin: "GPIO22"
-initial-on-time: 120
-find-modem-time: 60
-connection-timeout: 30
-ping-wait-time: 30
+initial-on-time: 2m
+find-modem-time: 1m
+connection-timeout: 1m
+ping-wait-time: 30s
 ping-retries: 5
-request-on-time: 60
+request-on-time: 2m

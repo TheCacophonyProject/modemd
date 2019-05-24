@@ -119,26 +119,28 @@ func runMain() error {
 			mc.CycleModemPower()
 		}
 
-		log.Println("waiting for modem to connect to a network")
-		connected, err := mc.WaitForConnection()
-		if err != nil {
-			return err
-		}
-		if connected {
-			log.Println("modem has connected to a network")
-			for {
-				if mc.PingTest() {
-					log.Println("ping test passed")
-				} else {
-					log.Println("ping test failed")
-					break
-				}
-				if !mc.WaitForNextPingTest() {
-					break
-				}
+		if mc.Modem != nil {
+			log.Println("waiting for modem to connect to a network")
+			connected, err := mc.WaitForConnection()
+			if err != nil {
+				return err
 			}
-		} else {
-			log.Println("modem failed to connect to a network")
+			if connected {
+				log.Println("modem has connected to a network")
+				for {
+					if mc.PingTest() {
+						log.Println("ping test passed")
+					} else {
+						log.Println("ping test failed")
+						break
+					}
+					if !mc.WaitForNextPingTest() {
+						break
+					}
+				}
+			} else {
+				log.Println("modem failed to connect to a network")
+			}
 		}
 
 		mc.Modem = nil
