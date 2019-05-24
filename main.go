@@ -51,9 +51,7 @@ func procArgs() Args {
 	return args
 }
 
-var (
-	version = "<not set>"
-)
+var version = "<not set>"
 
 func runMain() error {
 	args := procArgs()
