@@ -1,4 +1,4 @@
-package connectionRequester
+package connRequester
 
 import (
 	"errors"
