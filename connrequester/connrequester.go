@@ -1,4 +1,4 @@
-package connRequester
+package connrequester
 
 import (
 	"errors"
@@ -12,27 +12,22 @@ import (
 )
 
 const (
-	dbusPath   = "/org/cacophony/modemd"
-	dbusDest   = "org.cacophony.modemd"
-	methodBase = "org.cacophony.modemd"
+	dbusPath      = "/org/cacophony/modemd"
+	dbusDest      = "org.cacophony.modemd"
+	methodBase    = "org.cacophony.modemd"
+	wifiInterface = "wlan0"
 
-	requestinterval = 20
-	wifiInterface   = "wlan0"
-	pingTimeout     = 5
+	pingTimeout = 5
 )
 
-var hosts = []string{
-	"8.8.8.8",
-	"8.8.4.4",
-}
-
-func sendOnRequest() error {
-	obj, err := getDbusObj()
-	if err != nil {
-		return err
+var (
+	maxRetryInterval = time.Hour * 2
+	requestinterval  = time.Second * 20
+	hosts            = []string{
+		"8.8.8.8",
+		"8.8.4.4",
 	}
-	return obj.Call(methodBase+".StayOn", 0).Store()
-}
+)
 
 type ConnectionRequester struct {
 	stateChange  chan bool
@@ -43,7 +38,7 @@ type ConnectionRequester struct {
 // No connection will be requested until Start is called
 func NewConnectionRequester() *ConnectionRequester {
 	cr := &ConnectionRequester{
-		stateChange:  make(chan bool),
+		stateChange:  make(chan bool, 1),
 		sendRequests: false,
 	}
 	go cr.requestConnections()
@@ -69,40 +64,45 @@ func (cr *ConnectionRequester) WaitUntilUp(timeout time.Duration) error {
 // WaitUntilUpLoop will wait until a connection has been made returning an error
 // if no connection is made.
 // timeout is the time given to make a connection each try.
-// retryAfter is the duration between attempts, it will get doubled after each try.
-// retryAfter is how many times it will try to make a connection. If -1 it will
+// retryAfter is the duration between attempts, it will multipy by 1.5 after
+// each try with a maximum of 2 hours.
+// maxRetries is how many times it will try to make a connection. If -1 it will
 // try until a connection is made.
 func (cr *ConnectionRequester) WaitUntilUpLoop(
 	timeout time.Duration,
 	retryAfter time.Duration,
-	retryAttempts int) error {
+	maxRetries int) error {
 	retry := 0
 	for {
 		if err := cr.WaitUntilUp(timeout); err == nil {
 			return nil
 		}
-		if retryAttempts != -1 && retry >= retryAttempts {
+		if maxRetries != -1 && retry >= maxRetries {
 			return errors.New("no connection made")
 		}
 		retry++
 		cr.Stop() // Stopping requesting to save power
 		log.Println("connection failed. Retry in", retryAfter)
 		time.Sleep(retryAfter)
-		retryAfter = retryAfter * 2
+		retryAfter = retryAfter * 3 / 2
+		if retryAfter > maxRetryInterval {
+			retryAfter = maxRetryInterval
+		}
 		cr.Start()
 	}
 }
 
 // CheckWifiConnection will return true if the wifi is connected to the internet
 func CheckWifiConnection() bool {
-	outBytes, err := exec.Command("ip", "a", "show", wifiInterface).Output()
+	return isInterfaceUp(wifiInterface) && pingAllHosts(wifiInterface)
+}
+
+func isInterfaceUp(interfaceName string) bool {
+	outBytes, err := exec.Command("ip", "a", "show", interfaceName).Output()
 	if err != nil {
 		return false
 	}
-	if !strings.Contains(string(outBytes), "state UP") {
-		return false
-	}
-	return pingAllHosts(wifiInterface)
+	return strings.Contains(string(outBytes), "state UP")
 }
 
 func CheckConnection() bool {
@@ -172,7 +172,7 @@ func (cr *ConnectionRequester) requestConnections() {
 					log.Println("error with sending dbus signal: ", err)
 				}
 			}
-			newRequestTime = time.After(time.Second * requestinterval)
+			newRequestTime = time.After(requestinterval)
 		}
 		select {
 		case cr.sendRequests = <-cr.stateChange:
@@ -188,4 +188,12 @@ func getDbusObj() (dbus.BusObject, error) {
 	}
 	obj := conn.Object(dbusDest, dbusPath)
 	return obj, nil
+}
+
+func sendOnRequest() error {
+	obj, err := getDbusObj()
+	if err != nil {
+		return err
+	}
+	return obj.Call(methodBase+".StayOn", 0).Store()
 }
