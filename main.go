@@ -150,6 +150,4 @@ func runMain() error {
 		log.Println("powering off USB modem")
 		mc.SetModemPower(false)
 	}
-
-	return nil
 }
