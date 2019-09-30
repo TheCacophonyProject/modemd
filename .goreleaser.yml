@@ -17,8 +17,8 @@ builds:
   ldflags: -s -w -X main.version={{.Version}}
   binary: modemd
 
-nfpm:
-  vendor: The Cacophony Project
+nfpms:
+- vendor: The Cacophony Project
   homepage: http://cacophony.org.nz/
   maintainer: Cacophony Developers <coredev@cacophony.org.nz>
   description: Controls the USB modems
