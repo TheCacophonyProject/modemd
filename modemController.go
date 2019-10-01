@@ -24,6 +24,7 @@ import (
 	"os/exec"
 	"time"
 
+	goconfig "github.com/TheCacophonyProject/go-config"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
 )
@@ -31,7 +32,7 @@ import (
 type ModemController struct {
 	StartTime         time.Time
 	Modem             *Modem
-	ModemsConfig      []ModemConfig
+	ModemsConfig      []goconfig.Modem
 	TestHosts         []string
 	TestInterval      time.Duration
 	PowerPin          string
@@ -58,7 +59,7 @@ func (mc *ModemController) FindModem() bool {
 			return false
 		case <-time.After(time.Second):
 			for _, modemConfig := range mc.ModemsConfig {
-				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProduct)
+				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProductID)
 				if err := cmd.Run(); err == nil {
 					mc.Modem = NewModem(modemConfig)
 					return true

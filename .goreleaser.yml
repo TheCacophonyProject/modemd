@@ -30,8 +30,6 @@ nfpms:
   files:
     "_release/modemd.service": "/etc/systemd/system/modemd.service"
     "_release/org.cacophony.modemd.conf": "/etc/dbus-1/system.d/org.cacophony.modemd.conf"
-  config_files:
-    "_release/modemd.yaml": "/etc/cacophony/modemd.yaml"
 
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_checksums.txt'

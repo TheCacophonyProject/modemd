@@ -22,6 +22,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/TheCacophonyProject/go-config"
 	arg "github.com/alexflint/go-arg"
 	"periph.io/x/periph/host"
 )
@@ -34,7 +35,7 @@ func main() {
 }
 
 type Args struct {
-	ConfigFile   string `arg:"-c,--config" help:"path to configuration file"`
+	ConfigDir    string `arg:"-c,--config" help:"path to configuration directory"`
 	Timestamps   bool   `arg:"-t,--timestamps" help:"include timestamps in log output"`
 	RestartModem bool   `arg:"-r,--restart" help:"cycle the power to the USB port"`
 }
@@ -45,7 +46,7 @@ func (Args) Version() string {
 
 func procArgs() Args {
 	args := Args{
-		ConfigFile: "/etc/cacophony/modemd.yaml",
+		ConfigDir: config.DefaultConfigDir,
 	}
 	arg.MustParse(&args)
 	return args
@@ -65,7 +66,7 @@ func runMain() error {
 		return err
 	}
 
-	conf, err := ParseModemdConfig(args.ConfigFile)
+	conf, err := ParseModemdConfig(args.ConfigDir)
 	if err != nil {
 		return err
 	}
