@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	goconfig "github.com/TheCacophonyProject/go-config"
 )
 
 type Modem struct {
@@ -19,11 +21,11 @@ type Modem struct {
 }
 
 // NewModem return a new modem from the config
-func NewModem(config ModemConfig) *Modem {
+func NewModem(config goconfig.Modem) *Modem {
 	m := &Modem{
 		Name:          config.Name,
-		Netdev:        config.Netdev,
-		VendorProduct: config.VendorProduct,
+		Netdev:        config.NetDev,
+		VendorProduct: config.VendorProductID,
 	}
 	return m
 }

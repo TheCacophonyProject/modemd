@@ -19,39 +19,55 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
-	"io/ioutil"
 	"time"
 
-	yaml "gopkg.in/yaml.v2"
+	"github.com/TheCacophonyProject/go-config"
 )
 
 type ModemdConfig struct {
-	ModemsConfig      []ModemConfig `yaml:"modems"`
-	TestHosts         []string      `yaml:"test-hosts"`
-	TestInterval      time.Duration `yaml:"test-interval"`
-	PowerPin          string        `yaml:"power-pin"`
-	InitialOnTime     time.Duration `yaml:"initial-on-time"`
-	FindModemTime     time.Duration `yaml:"find-modem-time"`
-	ConnectionTimeout time.Duration `yaml:"connection-timeout"`
-	PingWaitTime      time.Duration `yaml:"ping-wait-time"`
-	PingRetries       int           `yaml:"ping-retries"`
-	RequestOnTime     time.Duration `yaml:"request-on-time"`
+	ModemsConfig      []config.Modem
+	TestHosts         []string
+	TestInterval      time.Duration
+	PowerPin          string
+	InitialOnTime     time.Duration
+	FindModemTime     time.Duration
+	ConnectionTimeout time.Duration
+	PingWaitTime      time.Duration
+	PingRetries       int
+	RequestOnTime     time.Duration
 }
 
-type ModemConfig struct {
-	Name          string `yaml:"name"`
-	Netdev        string `yaml:"netdev"`
-	VendorProduct string `yaml:"vendor-product"`
-}
-
-func ParseModemdConfig(filename string) (*ModemdConfig, error) {
-	buf, err := ioutil.ReadFile(filename)
+func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
+	conf, err := config.New(configDir)
 	if err != nil {
 		return nil, err
 	}
-	conf := &ModemdConfig{}
-	if err := yaml.Unmarshal(buf, conf); err != nil {
+
+	mdConf := config.DefaultModemd()
+	if err := conf.Unmarshal(config.ModemdKey, &mdConf); err != nil {
 		return nil, err
 	}
-	return conf, nil
+
+	testHosts := config.DefaultTestHosts()
+	if err := conf.Unmarshal(config.TestHostsKey, &testHosts); err != nil {
+		return nil, err
+	}
+
+	gpio := config.DefaultGPIO()
+	if err := conf.Unmarshal(config.GPIOKey, &gpio); err != nil {
+		return nil, err
+	}
+
+	return &ModemdConfig{
+		ModemsConfig:      mdConf.Modems,
+		TestHosts:         testHosts.URLs,
+		TestInterval:      mdConf.TestInterval,
+		PowerPin:          gpio.ModemPower,
+		InitialOnTime:     mdConf.InitialOnDuration,
+		FindModemTime:     mdConf.FindModemTimeout,
+		ConnectionTimeout: mdConf.ConnectionTimeout,
+		PingWaitTime:      testHosts.PingWaitTime,
+		PingRetries:       testHosts.PingRetries,
+		RequestOnTime:     mdConf.RequestOnDuration,
+	}, nil
 }
