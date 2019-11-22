@@ -55,7 +55,7 @@ func (mc *ModemController) FindModem() bool {
 		select {
 		case <-timeout:
 			return false
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			for _, modemConfig := range mc.ModemsConfig {
 				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProductID)
 				if err := cmd.Run(); err == nil {
