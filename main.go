@@ -109,12 +109,16 @@ func runMain() error {
 		mc.SetModemPower(true)
 
 		log.Println("finding USB modem")
+		loggedNotFoundModem := false
 		for !mc.ShouldBeOff() {
 			if mc.FindModem() {
 				log.Printf("found modem %s\n", mc.Modem.Name)
 				break
 			}
-			log.Println("no USB modem found")
+			if !loggedNotFoundModem {
+				log.Println("no USB modem found. Will cycle power on USB until one is found")
+				loggedNotFoundModem = true
+			}
 			mc.CycleModemPower()
 		}
 

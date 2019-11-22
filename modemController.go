@@ -20,7 +20,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os/exec"
 	"time"
 
@@ -47,7 +46,6 @@ type ModemController struct {
 }
 
 func (mc *ModemController) NewOnRequest() {
-	log.Println("stay on request")
 	mc.lastOnRequestTime = time.Now()
 }
 
