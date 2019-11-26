@@ -74,17 +74,20 @@ func runMain() error {
 	log.Printf("%+v\n", conf)
 
 	mc := ModemController{
-		StartTime:         time.Now(),
-		ModemsConfig:      conf.ModemsConfig,
-		TestHosts:         conf.TestHosts,
-		TestInterval:      conf.TestInterval,
-		PowerPin:          conf.PowerPin,
-		InitialOnTime:     conf.InitialOnTime,
-		FindModemTime:     conf.FindModemTime,
-		ConnectionTimeout: conf.ConnectionTimeout,
-		PingWaitTime:      conf.PingWaitTime,
-		PingRetries:       conf.PingRetries,
-		RequestOnTime:     conf.RequestOnTime,
+		StartTime:             time.Now(),
+		ModemsConfig:          conf.ModemsConfig,
+		TestHosts:             conf.TestHosts,
+		TestInterval:          conf.TestInterval,
+		PowerPin:              conf.PowerPin,
+		InitialOnDuration:     conf.InitialOnDuration,
+		FindModemDuration:     conf.FindModemDuration,
+		ConnectionTimeout:     conf.ConnectionTimeout,
+		PingWaitTime:          conf.PingWaitTime,
+		PingRetries:           conf.PingRetries,
+		RequestOnDuration:     conf.RequestOnDuration,
+		MinTimeFromFailedConn: conf.MinTimeFromFailedConn,
+		MinConnDuration:       conf.MinConnDuration,
+		MaxOffDuration:        conf.MaxOffDuration,
 	}
 
 	log.Println("starting dbus service")
@@ -92,17 +95,15 @@ func runMain() error {
 		return err
 	}
 
-	if mc.ShouldBeOff() || args.RestartModem {
+	if !mc.ShouldBeOn() || args.RestartModem {
 		log.Println("powering off USB modem")
 		mc.SetModemPower(false)
 	}
 
 	for {
-		if mc.ShouldBeOff() {
-			log.Println("waiting until modem should be powered on")
-			for mc.ShouldBeOff() {
-				time.Sleep(time.Second)
-			}
+		log.Println("waiting until modem should be powered on")
+		for !mc.ShouldBeOn() {
+			time.Sleep(5 * time.Second)
 		}
 
 		log.Println("powering on USB modem")
@@ -110,7 +111,7 @@ func runMain() error {
 
 		log.Println("finding USB modem")
 		loggedNotFoundModem := false
-		for !mc.ShouldBeOff() {
+		for mc.ShouldBeOn() {
 			if mc.FindModem() {
 				log.Printf("found modem %s\n", mc.Modem.Name)
 				break
@@ -130,11 +131,13 @@ func runMain() error {
 			}
 			if connected {
 				log.Println("modem has connected to a network")
+				mc.connectedTime = time.Now()
 				for {
 					if mc.PingTest() {
-						log.Println("ping test passed")
+						mc.lastSuccessfulPing = time.Now()
 					} else {
 						log.Println("ping test failed")
+						mc.lastFailedConnection = time.Now()
 						break
 					}
 					if !mc.WaitForNextPingTest() {
@@ -147,10 +150,6 @@ func runMain() error {
 		}
 
 		mc.Modem = nil
-
-		if mc.ShouldBeOff() {
-			log.Println("modem should no longer be on")
-		}
 
 		log.Println("powering off USB modem")
 		mc.SetModemPower(false)

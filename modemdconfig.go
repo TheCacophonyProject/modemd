@@ -25,16 +25,19 @@ import (
 )
 
 type ModemdConfig struct {
-	ModemsConfig      []config.Modem
-	TestHosts         []string
-	TestInterval      time.Duration
-	PowerPin          string
-	InitialOnTime     time.Duration
-	FindModemTime     time.Duration
-	ConnectionTimeout time.Duration
-	PingWaitTime      time.Duration
-	PingRetries       int
-	RequestOnTime     time.Duration
+	ModemsConfig          []config.Modem
+	TestHosts             []string
+	TestInterval          time.Duration
+	PowerPin              string
+	InitialOnDuration     time.Duration
+	FindModemDuration     time.Duration
+	ConnectionTimeout     time.Duration
+	PingWaitTime          time.Duration
+	PingRetries           int
+	RequestOnDuration     time.Duration
+	MinTimeFromFailedConn time.Duration
+	MaxOffDuration        time.Duration
+	MinConnDuration       time.Duration
 }
 
 func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
@@ -59,15 +62,18 @@ func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
 	}
 
 	return &ModemdConfig{
-		ModemsConfig:      mdConf.Modems,
-		TestHosts:         testHosts.URLs,
-		TestInterval:      mdConf.TestInterval,
-		PowerPin:          gpio.ModemPower,
-		InitialOnTime:     mdConf.InitialOnDuration,
-		FindModemTime:     mdConf.FindModemTimeout,
-		ConnectionTimeout: mdConf.ConnectionTimeout,
-		PingWaitTime:      testHosts.PingWaitTime,
-		PingRetries:       testHosts.PingRetries,
-		RequestOnTime:     mdConf.RequestOnDuration,
+		ModemsConfig:          mdConf.Modems,
+		TestHosts:             testHosts.URLs,
+		TestInterval:          mdConf.TestInterval,
+		PowerPin:              gpio.ModemPower,
+		InitialOnDuration:     mdConf.InitialOnDuration,
+		FindModemDuration:     mdConf.FindModemTimeout,
+		ConnectionTimeout:     mdConf.ConnectionTimeout,
+		PingWaitTime:          testHosts.PingWaitTime,
+		PingRetries:           testHosts.PingRetries,
+		RequestOnDuration:     mdConf.RequestOnDuration,
+		MinTimeFromFailedConn: mdConf.MinTimeFromFailedConn,
+		MinConnDuration:       mdConf.MinConnDuration,
+		MaxOffDuration:        mdConf.MaxOffDuration,
 	}, nil
 }

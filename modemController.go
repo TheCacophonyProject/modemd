@@ -20,6 +20,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os/exec"
 	"time"
 
@@ -29,20 +30,27 @@ import (
 )
 
 type ModemController struct {
-	StartTime         time.Time
-	Modem             *Modem
-	ModemsConfig      []goconfig.Modem
-	TestHosts         []string
-	TestInterval      time.Duration
-	PowerPin          string
-	InitialOnTime     time.Duration
-	FindModemTime     time.Duration // Time in seconds after USB powered on for the modem to be found
-	ConnectionTimeout time.Duration // Time in seconds for modem to make a connection to the network
-	PingWaitTime      time.Duration
-	PingRetries       int
-	RequestOnTime     time.Duration // Time the modem will stay on in seconds after a request was made
+	StartTime             time.Time
+	Modem                 *Modem
+	ModemsConfig          []goconfig.Modem
+	TestHosts             []string
+	TestInterval          time.Duration
+	PowerPin              string
+	InitialOnDuration     time.Duration
+	FindModemDuration     time.Duration // Time in seconds after USB powered on for the modem to be found
+	ConnectionTimeout     time.Duration // Time in seconds for modem to make a connection to the network
+	PingWaitTime          time.Duration
+	PingRetries           int
+	RequestOnDuration     time.Duration // Time the modem will stay on in seconds after a request was made
+	MinTimeFromFailedConn time.Duration
+	MaxOffDuration        time.Duration
+	MinConnDuration       time.Duration
 
-	lastOnRequestTime time.Time
+	lastOnRequestTime    time.Time
+	lastSuccessfulPing   time.Time
+	lastFailedConnection time.Time
+	connectedTime        time.Time
+	onOffReason          string
 }
 
 func (mc *ModemController) NewOnRequest() {
@@ -50,7 +58,7 @@ func (mc *ModemController) NewOnRequest() {
 }
 
 func (mc *ModemController) FindModem() bool {
-	timeout := time.After(mc.FindModemTime)
+	timeout := time.After(mc.FindModemDuration)
 	for {
 		select {
 		case <-timeout:
@@ -96,13 +104,15 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 	for {
 		select {
 		case <-timeout:
+			mc.lastFailedConnection = time.Now()
 			return false, nil
 		case <-time.After(time.Second):
 			def, err := mc.Modem.IsDefaultRoute()
 			if err != nil {
+				mc.lastFailedConnection = time.Now()
 				return false, err
 			}
-			if def {
+			if def && mc.PingTest() {
 				return true, nil
 			}
 		}
@@ -113,16 +123,38 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - InitialOnTime: Modem should be on for a set amount of time at the start.
 // - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
-func (mc *ModemController) ShouldBeOff() bool {
-	if !timeoutCheck(mc.StartTime, mc.InitialOnTime) {
-		return false
+func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
+
+	if timeFrom(mc.lastFailedConnection) < mc.MinTimeFromFailedConn {
+		return false, fmt.Sprintf("modem shouldn't be on as connection failed in the last %v", mc.MinTimeFromFailedConn)
 	}
 
-	if !timeoutCheck(mc.lastOnRequestTime, mc.RequestOnTime) {
-		return false
+	if timeFrom(mc.StartTime) < mc.InitialOnDuration {
+		return true, fmt.Sprintf("modem should be on for initial %v", mc.InitialOnDuration)
 	}
 
-	return true
+	if timeFrom(mc.lastOnRequestTime) < mc.RequestOnDuration {
+		return true, fmt.Sprintf("modem shoudl be on because of it being requested in the last %v", mc.RequestOnDuration)
+	}
+
+	if timeFrom(mc.lastSuccessfulPing) > mc.MaxOffDuration {
+		return true, fmt.Sprintf("modem should be on because modem has been off for over %s", mc.MaxOffDuration)
+	}
+
+	if timeFrom(mc.connectedTime) < mc.MinConnDuration {
+		return true, fmt.Sprintf("modem should be on because minimum connection duration is %v", mc.MinConnDuration)
+	}
+
+	return false, "no reason the modem should be on"
+}
+
+func (mc *ModemController) ShouldBeOn() bool {
+	on, reason := mc.shouldBeOnWithReason()
+	if mc.onOffReason != reason {
+		mc.onOffReason = reason
+		log.Println(reason)
+	}
+	return on
 }
 
 // WaitForNextPingTest will return false if when waiting ShouldBeOff returns
@@ -134,7 +166,7 @@ func (mc *ModemController) WaitForNextPingTest() bool {
 		case <-timeout:
 			return true
 		case <-time.After(time.Second):
-			if mc.ShouldBeOff() {
+			if !mc.ShouldBeOn() {
 				return false
 			}
 		}
@@ -146,6 +178,6 @@ func (mc *ModemController) PingTest() bool {
 	return mc.Modem.PingTest(seconds, mc.PingRetries, mc.TestHosts)
 }
 
-func timeoutCheck(startTime time.Time, timeout time.Duration) bool {
-	return time.Now().Sub(startTime) > timeout
+func timeFrom(t time.Time) time.Duration {
+	return time.Now().Sub(t)
 }

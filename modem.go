@@ -50,6 +50,7 @@ func (m *Modem) PingTest(timeoutSec int, retries int, hosts []string) bool {
 		if i > 1 {
 			log.Printf("ping test failed. %d more retries\n", i-1)
 		}
+		time.Sleep(2 * time.Second)
 	}
 	return false
 }
