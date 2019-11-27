@@ -29,12 +29,15 @@ type ModemdConfig struct {
 	TestHosts         []string
 	TestInterval      time.Duration
 	PowerPin          string
-	InitialOnTime     time.Duration
-	FindModemTime     time.Duration
+	InitialOnDuration time.Duration
+	FindModemDuration time.Duration
 	ConnectionTimeout time.Duration
 	PingWaitTime      time.Duration
 	PingRetries       int
-	RequestOnTime     time.Duration
+	RequestOnDuration time.Duration
+	RetryInterval     time.Duration
+	MaxOffDuration    time.Duration
+	MinConnDuration   time.Duration
 }
 
 func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
@@ -63,11 +66,14 @@ func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
 		TestHosts:         testHosts.URLs,
 		TestInterval:      mdConf.TestInterval,
 		PowerPin:          gpio.ModemPower,
-		InitialOnTime:     mdConf.InitialOnDuration,
-		FindModemTime:     mdConf.FindModemTimeout,
+		InitialOnDuration: mdConf.InitialOnDuration,
+		FindModemDuration: mdConf.FindModemTimeout,
 		ConnectionTimeout: mdConf.ConnectionTimeout,
 		PingWaitTime:      testHosts.PingWaitTime,
 		PingRetries:       testHosts.PingRetries,
-		RequestOnTime:     mdConf.RequestOnDuration,
+		RequestOnDuration: mdConf.RequestOnDuration,
+		RetryInterval:     mdConf.RetryInterval,
+		MinConnDuration:   mdConf.MinConnDuration,
+		MaxOffDuration:    mdConf.MaxOffDuration,
 	}, nil
 }
