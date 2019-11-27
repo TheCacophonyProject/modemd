@@ -74,20 +74,20 @@ func runMain() error {
 	log.Printf("%+v\n", conf)
 
 	mc := ModemController{
-		StartTime:             time.Now(),
-		ModemsConfig:          conf.ModemsConfig,
-		TestHosts:             conf.TestHosts,
-		TestInterval:          conf.TestInterval,
-		PowerPin:              conf.PowerPin,
-		InitialOnDuration:     conf.InitialOnDuration,
-		FindModemDuration:     conf.FindModemDuration,
-		ConnectionTimeout:     conf.ConnectionTimeout,
-		PingWaitTime:          conf.PingWaitTime,
-		PingRetries:           conf.PingRetries,
-		RequestOnDuration:     conf.RequestOnDuration,
-		MinTimeFromFailedConn: conf.MinTimeFromFailedConn,
-		MinConnDuration:       conf.MinConnDuration,
-		MaxOffDuration:        conf.MaxOffDuration,
+		StartTime:         time.Now(),
+		ModemsConfig:      conf.ModemsConfig,
+		TestHosts:         conf.TestHosts,
+		TestInterval:      conf.TestInterval,
+		PowerPin:          conf.PowerPin,
+		InitialOnDuration: conf.InitialOnDuration,
+		FindModemDuration: conf.FindModemDuration,
+		ConnectionTimeout: conf.ConnectionTimeout,
+		PingWaitTime:      conf.PingWaitTime,
+		PingRetries:       conf.PingRetries,
+		RequestOnDuration: conf.RequestOnDuration,
+		RetryInterval:     conf.RetryInterval,
+		MinConnDuration:   conf.MinConnDuration,
+		MaxOffDuration:    conf.MaxOffDuration,
 	}
 
 	log.Println("starting dbus service")

@@ -30,21 +30,21 @@ import (
 )
 
 type ModemController struct {
-	StartTime             time.Time
-	Modem                 *Modem
-	ModemsConfig          []goconfig.Modem
-	TestHosts             []string
-	TestInterval          time.Duration
-	PowerPin              string
-	InitialOnDuration     time.Duration
-	FindModemDuration     time.Duration // Time in seconds after USB powered on for the modem to be found
-	ConnectionTimeout     time.Duration // Time in seconds for modem to make a connection to the network
-	PingWaitTime          time.Duration
-	PingRetries           int
-	RequestOnDuration     time.Duration // Time the modem will stay on in seconds after a request was made
-	MinTimeFromFailedConn time.Duration
-	MaxOffDuration        time.Duration
-	MinConnDuration       time.Duration
+	StartTime         time.Time
+	Modem             *Modem
+	ModemsConfig      []goconfig.Modem
+	TestHosts         []string
+	TestInterval      time.Duration
+	PowerPin          string
+	InitialOnDuration time.Duration
+	FindModemDuration time.Duration // Time in seconds after USB powered on for the modem to be found
+	ConnectionTimeout time.Duration // Time in seconds for modem to make a connection to the network
+	PingWaitTime      time.Duration
+	PingRetries       int
+	RequestOnDuration time.Duration // Time the modem will stay on in seconds after a request was made
+	RetryInterval     time.Duration
+	MaxOffDuration    time.Duration
+	MinConnDuration   time.Duration
 
 	lastOnRequestTime    time.Time
 	lastSuccessfulPing   time.Time
@@ -125,23 +125,23 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 
-	if timeFrom(mc.lastFailedConnection) < mc.MinTimeFromFailedConn {
-		return false, fmt.Sprintf("modem shouldn't be on as connection failed in the last %v", mc.MinTimeFromFailedConn)
+	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
+		return false, fmt.Sprintf("modem shouldn't retry connection for %v", mc.RetryInterval)
 	}
 
-	if timeFrom(mc.StartTime) < mc.InitialOnDuration {
+	if time.Since(mc.StartTime) < mc.InitialOnDuration {
 		return true, fmt.Sprintf("modem should be on for initial %v", mc.InitialOnDuration)
 	}
 
-	if timeFrom(mc.lastOnRequestTime) < mc.RequestOnDuration {
+	if time.Since(mc.lastOnRequestTime) < mc.RequestOnDuration {
 		return true, fmt.Sprintf("modem shoudl be on because of it being requested in the last %v", mc.RequestOnDuration)
 	}
 
-	if timeFrom(mc.lastSuccessfulPing) > mc.MaxOffDuration {
+	if time.Since(mc.lastSuccessfulPing) > mc.MaxOffDuration {
 		return true, fmt.Sprintf("modem should be on because modem has been off for over %s", mc.MaxOffDuration)
 	}
 
-	if timeFrom(mc.connectedTime) < mc.MinConnDuration {
+	if time.Since(mc.connectedTime) < mc.MinConnDuration {
 		return true, fmt.Sprintf("modem should be on because minimum connection duration is %v", mc.MinConnDuration)
 	}
 
@@ -176,8 +176,4 @@ func (mc *ModemController) WaitForNextPingTest() bool {
 func (mc *ModemController) PingTest() bool {
 	seconds := int(mc.PingWaitTime / time.Second)
 	return mc.Modem.PingTest(seconds, mc.PingRetries, mc.TestHosts)
-}
-
-func timeFrom(t time.Time) time.Duration {
-	return time.Now().Sub(t)
 }
