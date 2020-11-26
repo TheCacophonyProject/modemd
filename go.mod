@@ -11,7 +11,6 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.5.0 // indirect
-	golang.org/x/text v0.3.2 // indirect
 	periph.io/x/periph v3.6.4+incompatible
 )
 
