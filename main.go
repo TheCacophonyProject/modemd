@@ -22,6 +22,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
 	"github.com/TheCacophonyProject/go-config"
 	arg "github.com/alexflint/go-arg"
 	"periph.io/x/periph/host"
@@ -135,6 +136,7 @@ func runMain() error {
 				for {
 					if mc.PingTest() {
 						mc.lastSuccessfulPing = time.Now()
+						eventclient.UploadEvents() // Upload events each time connecting.
 					} else {
 						log.Println("ping test failed")
 						mc.lastFailedConnection = time.Now()

@@ -134,7 +134,7 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 	}
 
 	if time.Since(mc.lastOnRequestTime) < mc.RequestOnDuration {
-		return true, fmt.Sprintf("modem shoudl be on because of it being requested in the last %v", mc.RequestOnDuration)
+		return true, fmt.Sprintf("modem should be on because of it being requested in the last %v", mc.RequestOnDuration)
 	}
 
 	if time.Since(mc.lastSuccessfulPing) > mc.MaxOffDuration {
