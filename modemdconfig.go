@@ -25,19 +25,20 @@ import (
 )
 
 type ModemdConfig struct {
-	ModemsConfig      []config.Modem
-	TestHosts         []string
-	TestInterval      time.Duration
-	PowerPin          string
-	InitialOnDuration time.Duration
-	FindModemDuration time.Duration
-	ConnectionTimeout time.Duration
-	PingWaitTime      time.Duration
-	PingRetries       int
-	RequestOnDuration time.Duration
-	RetryInterval     time.Duration
-	MaxOffDuration    time.Duration
-	MinConnDuration   time.Duration
+	ModemsConfig           []config.Modem
+	TestHosts              []string
+	TestInterval           time.Duration
+	PowerPin               string
+	InitialOnDuration      time.Duration
+	FindModemDuration      time.Duration
+	ConnectionTimeout      time.Duration
+	PingWaitTime           time.Duration
+	PingRetries            int
+	RequestOnDuration      time.Duration
+	RetryInterval          time.Duration
+	RetryFindModemInterval time.Duration
+	MaxOffDuration         time.Duration
+	MinConnDuration        time.Duration
 }
 
 func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
@@ -62,18 +63,19 @@ func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
 	}
 
 	return &ModemdConfig{
-		ModemsConfig:      mdConf.Modems,
-		TestHosts:         testHosts.URLs,
-		TestInterval:      mdConf.TestInterval,
-		PowerPin:          gpio.ModemPower,
-		InitialOnDuration: mdConf.InitialOnDuration,
-		FindModemDuration: mdConf.FindModemTimeout,
-		ConnectionTimeout: mdConf.ConnectionTimeout,
-		PingWaitTime:      testHosts.PingWaitTime,
-		PingRetries:       testHosts.PingRetries,
-		RequestOnDuration: mdConf.RequestOnDuration,
-		RetryInterval:     mdConf.RetryInterval,
-		MinConnDuration:   mdConf.MinConnDuration,
-		MaxOffDuration:    mdConf.MaxOffDuration,
+		ModemsConfig:           mdConf.Modems,
+		TestHosts:              testHosts.URLs,
+		TestInterval:           mdConf.TestInterval,
+		PowerPin:               gpio.ModemPower,
+		InitialOnDuration:      mdConf.InitialOnDuration,
+		FindModemDuration:      mdConf.FindModemTimeout,
+		ConnectionTimeout:      mdConf.ConnectionTimeout,
+		PingWaitTime:           testHosts.PingWaitTime,
+		PingRetries:            testHosts.PingRetries,
+		RequestOnDuration:      mdConf.RequestOnDuration,
+		RetryInterval:          mdConf.RetryInterval,
+		RetryFindModemInterval: mdConf.RetryFindModemInterval,
+		MinConnDuration:        mdConf.MinConnDuration,
+		MaxOffDuration:         mdConf.MaxOffDuration,
 	}, nil
 }

@@ -26,6 +26,8 @@ import (
 	"github.com/TheCacophonyProject/go-config"
 	arg "github.com/alexflint/go-arg"
 	"periph.io/x/periph/host"
+
+	saltrequester "github.com/TheCacophonyProject/salt-updater"
 )
 
 func main() {
@@ -75,20 +77,21 @@ func runMain() error {
 	log.Printf("%+v\n", conf)
 
 	mc := ModemController{
-		StartTime:         time.Now(),
-		ModemsConfig:      conf.ModemsConfig,
-		TestHosts:         conf.TestHosts,
-		TestInterval:      conf.TestInterval,
-		PowerPin:          conf.PowerPin,
-		InitialOnDuration: conf.InitialOnDuration,
-		FindModemDuration: conf.FindModemDuration,
-		ConnectionTimeout: conf.ConnectionTimeout,
-		PingWaitTime:      conf.PingWaitTime,
-		PingRetries:       conf.PingRetries,
-		RequestOnDuration: conf.RequestOnDuration,
-		RetryInterval:     conf.RetryInterval,
-		MinConnDuration:   conf.MinConnDuration,
-		MaxOffDuration:    conf.MaxOffDuration,
+		StartTime:              time.Now(),
+		ModemsConfig:           conf.ModemsConfig,
+		TestHosts:              conf.TestHosts,
+		TestInterval:           conf.TestInterval,
+		PowerPin:               conf.PowerPin,
+		InitialOnDuration:      conf.InitialOnDuration,
+		FindModemDuration:      conf.FindModemDuration,
+		ConnectionTimeout:      conf.ConnectionTimeout,
+		PingWaitTime:           conf.PingWaitTime,
+		PingRetries:            conf.PingRetries,
+		RequestOnDuration:      conf.RequestOnDuration,
+		RetryInterval:          conf.RetryInterval,
+		RetryFindModemInterval: conf.RetryFindModemInterval,
+		MinConnDuration:        conf.MinConnDuration,
+		MaxOffDuration:         conf.MaxOffDuration,
 	}
 
 	log.Println("starting dbus service")
@@ -111,15 +114,20 @@ func runMain() error {
 		mc.SetModemPower(true)
 
 		log.Println("finding USB modem")
-		loggedNotFoundModem := false
+		retries := 3
 		for mc.ShouldBeOn() {
 			if mc.FindModem() {
 				log.Printf("found modem %s\n", mc.Modem.Name)
 				break
 			}
-			if !loggedNotFoundModem {
-				log.Println("no USB modem found. Will cycle power on USB until one is found")
-				loggedNotFoundModem = true
+			retries--
+			if retries < 1 {
+				log.Println("failed to find USB modem, will check again later")
+				mc.lastFailedFindModem = time.Now()
+				mc.SetModemPower(false)
+				break
+			} else {
+				log.Printf("no USB modem found. Will cycle power %d more time(s) to find modem", retries)
 			}
 			mc.CycleModemPower()
 		}
@@ -130,13 +138,18 @@ func runMain() error {
 			if err != nil {
 				return err
 			}
+			connectionsFirstPing := true
 			if connected {
 				log.Println("modem has connected to a network")
 				mc.connectedTime = time.Now()
 				for {
 					if mc.PingTest() {
 						mc.lastSuccessfulPing = time.Now()
-						eventclient.UploadEvents() // Upload events each time connecting.
+						if connectionsFirstPing {
+							connectionsFirstPing = false
+							eventclient.UploadEvents() // Upload events each time connecting.
+							saltrequester.RunPing()    // Ping salt server triggering scheduled commands to run.
+						}
 					} else {
 						log.Println("ping test failed")
 						mc.lastFailedConnection = time.Now()
