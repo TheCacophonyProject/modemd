@@ -21,6 +21,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"time"
 
@@ -30,25 +31,27 @@ import (
 )
 
 type ModemController struct {
-	StartTime         time.Time
-	Modem             *Modem
-	ModemsConfig      []goconfig.Modem
-	TestHosts         []string
-	TestInterval      time.Duration
-	PowerPin          string
-	InitialOnDuration time.Duration
-	FindModemDuration time.Duration // Time in seconds after USB powered on for the modem to be found
-	ConnectionTimeout time.Duration // Time in seconds for modem to make a connection to the network
-	PingWaitTime      time.Duration
-	PingRetries       int
-	RequestOnDuration time.Duration // Time the modem will stay on in seconds after a request was made
-	RetryInterval     time.Duration
-	MaxOffDuration    time.Duration
-	MinConnDuration   time.Duration
+	StartTime              time.Time
+	Modem                  *Modem
+	ModemsConfig           []goconfig.Modem
+	TestHosts              []string
+	TestInterval           time.Duration
+	PowerPin               string
+	InitialOnDuration      time.Duration
+	FindModemDuration      time.Duration // Time in seconds after USB powered on for the modem to be found
+	ConnectionTimeout      time.Duration // Time in seconds for modem to make a connection to the network
+	PingWaitTime           time.Duration
+	PingRetries            int
+	RequestOnDuration      time.Duration // Time the modem will stay on in seconds after a request was made
+	RetryInterval          time.Duration
+	RetryFindModemInterval time.Duration
+	MaxOffDuration         time.Duration
+	MinConnDuration        time.Duration
 
 	lastOnRequestTime    time.Time
 	lastSuccessfulPing   time.Time
 	lastFailedConnection time.Time
+	lastFailedFindModem  time.Time
 	connectedTime        time.Time
 	onOffReason          string
 }
@@ -63,7 +66,7 @@ func (mc *ModemController) FindModem() bool {
 		select {
 		case <-timeout:
 			return false
-		case <-time.After(10 * time.Second):
+		case <-time.After(time.Second):
 			for _, modemConfig := range mc.ModemsConfig {
 				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProductID)
 				if err := cmd.Run(); err == nil {
@@ -81,9 +84,26 @@ func (mc *ModemController) SetModemPower(on bool) error {
 		if err := pin.Out(gpio.High); err != nil {
 			return fmt.Errorf("failed to set modem power pin high: %v", err)
 		}
+		//Power on USB hub
+		f, err := os.Create("/sys/devices/platform/soc/3f980000.usb/buspower")
+		if err != nil {
+			return err
+		}
+		if _, err := f.WriteString("1"); err != nil {
+			return err
+		}
+		time.Sleep(2 * time.Second)
+		//Power off the ethernet port to save energy.
+		if err := exec.Command("uhubctl", "-a", "off", "-l", "1-1", "-p", "1").Run(); err != nil {
+			return err
+		}
 	} else {
 		if err := pin.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
+		}
+		//Power off the USB hub.
+		if err := exec.Command("uhubctl", "-a", "off", "-l", "1").Run(); err != nil {
+			return err
 		}
 		time.Sleep(time.Second * 5)
 	}
@@ -124,6 +144,9 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
+	if time.Since(mc.lastFailedFindModem) < mc.RetryFindModemInterval {
+		return false, fmt.Sprintf("shouldn't retry finding modem for %v", mc.RetryFindModemInterval)
+	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
 		return false, fmt.Sprintf("modem shouldn't retry connection for %v", mc.RetryInterval)
