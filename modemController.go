@@ -21,13 +21,11 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"time"
 
 	goconfig "github.com/TheCacophonyProject/go-config"
-	"periph.io/x/periph/conn/gpio"
-	"periph.io/x/periph/conn/gpio/gpioreg"
+	"github.com/tarm/serial"
 )
 
 type ModemController struct {
@@ -78,36 +76,62 @@ func (mc *ModemController) FindModem() bool {
 	}
 }
 
-func (mc *ModemController) SetModemPower(on bool) error {
-	pin := gpioreg.ByName(mc.PowerPin)
-	if on {
-		if err := pin.Out(gpio.High); err != nil {
-			return fmt.Errorf("failed to set modem power pin high: %v", err)
-		}
-		//Power on USB hub
-		f, err := os.Create("/sys/devices/platform/soc/3f980000.usb/buspower")
-		if err != nil {
-			return err
-		}
-		if _, err := f.WriteString("1"); err != nil {
-			return err
-		}
-		time.Sleep(2 * time.Second)
-		//Power off the ethernet port to save energy.
-		if err := exec.Command("uhubctl", "-a", "off", "-l", "1-1", "-p", "1").Run(); err != nil {
-			return err
-		}
-	} else {
-		if err := pin.Out(gpio.Low); err != nil {
-			return fmt.Errorf("failed to set modem power pin low: %v", err)
-		}
-		//Power off the USB hub.
-		if err := exec.Command("uhubctl", "-a", "off", "-l", "1").Run(); err != nil {
-			return err
-		}
-		time.Sleep(time.Second * 5)
+func (mc *ModemController) TurnOnModem() error {
+	c := &serial.Config{Name: "/dev/ttyUSB2", Baud: 115200}
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return err
 	}
+
+	_, err = s.Write([]byte("AT\r"))
+	if err != nil {
+		return err
+	}
+
+	buf := make([]byte, 128)
+	n, err := s.Read(buf)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(buf[:n]))
 	return nil
+}
+
+func (mc *ModemController) SetModemPower(on bool) error {
+	//TODO Change it to power on/off the USB modem through pin GPIO16, LOW is off.
+	return nil
+	/*
+		pin := gpioreg.ByName(mc.PowerPin)
+		if on {
+			if err := pin.Out(gpio.High); err != nil {
+				return fmt.Errorf("failed to set modem power pin high: %v", err)
+			}
+			//Power on USB hub
+			f, err := os.Create("/sys/devices/platform/soc/3f980000.usb/buspower")
+			if err != nil {
+				return err
+			}
+			if _, err := f.WriteString("1"); err != nil {
+				return err
+			}
+			time.Sleep(2 * time.Second)
+			//Power off the ethernet port to save energy.
+			if err := exec.Command("uhubctl", "-a", "off", "-l", "1-1", "-p", "1").Run(); err != nil {
+				return err
+			}
+		} else {
+			if err := pin.Out(gpio.Low); err != nil {
+				return fmt.Errorf("failed to set modem power pin low: %v", err)
+			}
+			//Power off the USB hub.
+			if err := exec.Command("uhubctl", "-a", "off", "-l", "1").Run(); err != nil {
+				return err
+			}
+			time.Sleep(time.Second * 5)
+		}
+		return nil
+	*/
 }
 
 func (mc *ModemController) CycleModemPower() error {

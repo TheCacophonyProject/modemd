@@ -76,9 +76,14 @@ func runMain() error {
 
 	log.Printf("%+v\n", conf)
 
+	m := []config.Modem{
+		{Name: "Qualcomm", NetDev: "usb0", VendorProductID: "1e0e:9011"},
+	}
+
 	mc := ModemController{
-		StartTime:              time.Now(),
-		ModemsConfig:           conf.ModemsConfig,
+		StartTime: time.Now(),
+		//ModemsConfig:           conf.ModemsConfig,
+		ModemsConfig:           m,
 		TestHosts:              conf.TestHosts,
 		TestInterval:           conf.TestInterval,
 		PowerPin:               conf.PowerPin,
@@ -133,6 +138,11 @@ func runMain() error {
 		}
 
 		if mc.Modem != nil {
+			//TODO commands to setup modem connection.
+			//if err := mc.TurnOnModem(); err != nil {
+			//	return err
+			//}
+			//return nil
 			log.Println("waiting for modem to connect to a network")
 			connected, err := mc.WaitForConnection()
 			if err != nil {
