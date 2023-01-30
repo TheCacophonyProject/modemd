@@ -26,6 +26,9 @@ import (
 
 	goconfig "github.com/TheCacophonyProject/go-config"
 	"github.com/tarm/serial"
+	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/gpio/gpioreg"
+	"periph.io/x/periph/host"
 )
 
 type ModemController struct {
@@ -100,6 +103,22 @@ func (mc *ModemController) TurnOnModem() error {
 
 func (mc *ModemController) SetModemPower(on bool) error {
 	//TODO Change it to power on/off the USB modem through pin GPIO16, LOW is off.
+	// Make sure periph is initialized.
+	host.Init()
+
+	pin := gpioreg.ByName("GPIO16")
+	if pin == nil {
+		return fmt.Errorf("failed to init GPIO16 pin")
+	}
+	if on {
+		if err := pin.Out(gpio.High); err != nil {
+			return fmt.Errorf("failed to set modem power pin high: %v", err)
+		}
+	} else {
+		if err := pin.Out(gpio.Low); err != nil {
+			return fmt.Errorf("failed to set modem power pin high: %v", err)
+		}
+	}
 	return nil
 	/*
 		pin := gpioreg.ByName(mc.PowerPin)
