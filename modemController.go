@@ -21,7 +21,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
 	"os/exec"
 	"time"
 
@@ -85,16 +84,7 @@ func (mc *ModemController) SetModemPower(on bool) error {
 			return fmt.Errorf("failed to set modem power pin high: %v", err)
 		}
 		//Power on USB hub
-		f, err := os.Create("/sys/devices/platform/soc/3f980000.usb/buspower")
-		if err != nil {
-			return err
-		}
-		if _, err := f.WriteString("1"); err != nil {
-			return err
-		}
-		time.Sleep(2 * time.Second)
-		//Power off the ethernet port to save energy.
-		if err := exec.Command("uhubctl", "-a", "off", "-l", "1-1", "-p", "1").Run(); err != nil {
+		if err := exec.Command("sh", "-c", "echo 1 > /sys/devices/platform/soc/3f980000.usb/buspower").Run(); err != nil {
 			return err
 		}
 	} else {
@@ -102,7 +92,7 @@ func (mc *ModemController) SetModemPower(on bool) error {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
 		//Power off the USB hub.
-		if err := exec.Command("uhubctl", "-a", "off", "-l", "1").Run(); err != nil {
+		if err := exec.Command("sh", "-c", "echo 0 > /sys/devices/platform/soc/3f980000.usb/buspower").Run(); err != nil {
 			return err
 		}
 		time.Sleep(time.Second * 5)
