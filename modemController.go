@@ -87,11 +87,18 @@ func (mc *ModemController) SetModemPower(on bool) error {
 		if err := exec.Command("sh", "-c", "echo 1 > /sys/devices/platform/soc/3f980000.usb/buspower").Run(); err != nil {
 			return err
 		}
+		if err := exec.Command("sh", "-c", "uhubctl -a on -l 1-1").Run(); err != nil {
+			return err
+		}
+
 	} else {
 		if err := pin.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
 		//Power off the USB hub.
+		if err := exec.Command("sh", "-c", "uhubctl -a off -l 1-1").Run(); err != nil {
+			return err
+		}
 		if err := exec.Command("sh", "-c", "echo 0 > /sys/devices/platform/soc/3f980000.usb/buspower").Run(); err != nil {
 			return err
 		}
