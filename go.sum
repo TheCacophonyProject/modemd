@@ -53,8 +53,8 @@ github.com/TheCacophonyProject/event-reporter/v3 v3.3.0 h1:/leMKQ0G+nEzTOgd+d/WM
 github.com/TheCacophonyProject/event-reporter/v3 v3.3.0/go.mod h1:dGIYfhABsJHKjcsxtftDwpdcfLOWTYKeIyCYxCOIMrc=
 github.com/TheCacophonyProject/go-api v0.0.0-20190923033957-174cea2ac81c/go.mod h1:FfMpa4cFhNXQ9tuKG18HO6yLExezcJhzjUjBOFocrQw=
 github.com/TheCacophonyProject/go-config v0.0.0-20190922224052-7c2a21bc6b88/go.mod h1:gPUJLVu408NRz9/P3BrsxzOzLc+KJLrv+jVdDw3RI0Y=
-github.com/TheCacophonyProject/go-config v1.8.2 h1:jpmkenUWCDmOHXkWuJGEc5eLTNqhmJvvXWZiAMzxmo8=
-github.com/TheCacophonyProject/go-config v1.8.2/go.mod h1:65yj/WEJ4yBUjYSMmTRH4wuzcvsmJNUrvziP6lzGXcA=
+github.com/TheCacophonyProject/go-config v1.8.3 h1:I7TOwfoPvIkBEY5+KgI9/3sHqnCgrFr14KkO4zWF/48=
+github.com/TheCacophonyProject/go-config v1.8.3/go.mod h1:65yj/WEJ4yBUjYSMmTRH4wuzcvsmJNUrvziP6lzGXcA=
 github.com/TheCacophonyProject/go-cptv v0.0.0-20200116020937-858bd8b71512/go.mod h1:8H6Aaft5549sIWxcsuCIL2o60/TQkoF93fVoSTpgZb8=
 github.com/TheCacophonyProject/go-cptv v0.0.0-20200616224711-fc633122087a/go.mod h1:Vg73Ezn4kr8qDNP9LNgjki9qgi+5T/0Uc9oDyflaYUY=
 github.com/TheCacophonyProject/go-cptv v0.0.0-20201215230510-ae7134e91a71 h1:g6XLYIt3hFo2JOQhbfySLxcFFv0kofg0L1Z7MyNXsLc=
