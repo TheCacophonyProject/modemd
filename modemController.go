@@ -19,10 +19,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	goconfig "github.com/TheCacophonyProject/go-config"
@@ -168,7 +170,26 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 		return true, fmt.Sprintf("modem should be on because minimum connection duration is %v", mc.MinConnDuration)
 	}
 
+	if saltCommandsRunning() {
+		return true, fmt.Sprintln("modem should be on because salt commands are running")
+	}
+
 	return false, "no reason the modem should be on"
+}
+
+func saltCommandsRunning() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "salt-call", "saltutil.running")
+
+	stdout, err := cmd.Output()
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	return len(strings.Split(strings.TrimSpace(string(stdout)), "\n")) > 2
 }
 
 func (mc *ModemController) ShouldBeOn() bool {
