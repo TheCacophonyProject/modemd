@@ -65,6 +65,12 @@ func genIntrospectable(v interface{}) introspect.Introspectable {
 	return introspect.NewIntrospectable(node)
 }
 
+
+// ModemState will return the modems current state
+func (s service) ModemState() (int,*dbus.Error) {
+	return s.mc.ModemState(),nil
+}
+
 // StayOn will keep the modem on for a set amount of time
 func (s service) StayOn() *dbus.Error {
 	s.mc.NewOnRequest()

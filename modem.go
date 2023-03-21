@@ -14,10 +14,16 @@ import (
 	goconfig "github.com/TheCacophonyProject/go-config"
 )
 
+const(
+	Disconnected = 0
+	Connecting = 1
+	Connected = 2
+)
 type Modem struct {
 	Name          string
 	Netdev        string
 	VendorProduct string
+	State int
 }
 
 // NewModem return a new modem from the config
@@ -26,6 +32,7 @@ func NewModem(config goconfig.Modem) *Modem {
 		Name:          config.Name,
 		Netdev:        config.NetDev,
 		VendorProduct: config.VendorProductID,
+		State: Disconnected,
 	}
 	return m
 }

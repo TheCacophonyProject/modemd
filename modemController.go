@@ -58,6 +58,13 @@ type ModemController struct {
 	onOffReason          string
 }
 
+func (mc *ModemController) ModemState() int {
+	if mc.Modem == nil{
+		return Disconnected
+	}
+	return mc.Modem.State
+}
+
 func (mc *ModemController) NewOnRequest() {
 	mc.lastOnRequestTime = time.Now()
 }
@@ -73,6 +80,7 @@ func (mc *ModemController) FindModem() bool {
 				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProductID)
 				if err := cmd.Run(); err == nil {
 					mc.Modem = NewModem(modemConfig)
+					mc.Modem.State = Connecting
 					return true
 				}
 			}
@@ -135,6 +143,7 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 				return false, err
 			}
 			if def && mc.PingTest() {
+				mc.Modem.State = Connected
 				return true, nil
 			}
 		}
