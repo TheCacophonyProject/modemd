@@ -96,9 +96,9 @@ func (mc *ModemController) SetModemPower(on bool) error {
 		}
 		time.Sleep(2 * time.Second)
 		//Power off the ethernet port to save energy.
-		if err := exec.Command("uhubctl", "-a", "off", "-l", "1-1", "-p", "1").Run(); err != nil {
-			return err
-		}
+		//if err := exec.Command("uhubctl", "-a", "off", "-l", "1-1", "-p", "1").Run(); err != nil {
+		//		return err
+		//		}
 	} else {
 		if err := pin.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
