@@ -109,7 +109,6 @@ func isInterfaceUp(interfaceName string) bool {
 
 func CheckConnection() bool {
 	state,err := getModemState()
-	log.Println("Got state %v",state)
 	if err != nil{
 		log.Println("error getting modem state from dbus: ", err)
 	}
@@ -209,8 +208,9 @@ func sendOnRequest() error {
 func  getModemState() (int,error) {
 	obj, err := getDbusObj()
 	if err != nil {
-		return err
+		return 0,err
 	}
-	var int state
-	return obj.Call(methodBase+".ModemState", 0).Store(&state)
+	var state int
+	err= obj.Call(methodBase+".ModemState", 0).Store(&state)
+	return state,err
 }

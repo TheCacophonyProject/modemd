@@ -36,4 +36,3 @@ func (cr *ConnectionRequester) Start() {}
 
 // Stop will stop requesting for a connection to be made.
 func (cr *ConnectionRequester) Stop() {}
-
