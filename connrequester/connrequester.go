@@ -1,3 +1,4 @@
+//go:build arm
 // +build arm
 
 package connrequester
@@ -108,7 +109,15 @@ func isInterfaceUp(interfaceName string) bool {
 }
 
 func CheckConnection() bool {
-	return pingAllHosts("")
+	return pingAllHosts("") && checkDNS()
+}
+
+func checkDNS() bool {
+	res := exec.Command("nslookup", "google.com", "-timeout=1", "-retry=1").Run() == nil
+	if !res {
+		log.Println("DNS lookup failed")
+	}
+	return res
 }
 
 func pingAllHosts(interfaceName string) bool {

@@ -1,4 +1,4 @@
-// +build amd64 darwin
+//go:build amd64 || darwin
 
 package connrequester
 
@@ -28,12 +28,11 @@ func (cr *ConnectionRequester) WaitUntilUpLoop(
 	timeout time.Duration,
 	retryAfter time.Duration,
 	maxRetries int) error {
-		return nil
-	}
+	return nil
+}
 
 // Start will start requesting for a connection to be made.
 func (cr *ConnectionRequester) Start() {}
 
 // Stop will stop requesting for a connection to be made.
 func (cr *ConnectionRequester) Stop() {}
-
