@@ -181,7 +181,7 @@ func saltCommandsRunning() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "salt-call", "saltutil.running")
+	cmd := exec.CommandContext(ctx, "salt-call", "--local", "saltutil.running")
 
 	stdout, err := cmd.Output()
 	if err != nil {
