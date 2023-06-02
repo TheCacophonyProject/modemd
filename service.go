@@ -20,6 +20,7 @@ package main
 
 import (
 	"errors"
+	"log"
 
 	"github.com/godbus/dbus"
 	"github.com/godbus/dbus/introspect"
@@ -32,6 +33,16 @@ const (
 
 type service struct {
 	mc *ModemController
+}
+
+func sendModemConnectedSignal() error {
+	conn, err := dbus.SystemBus()
+	if err != nil {
+		return err
+	}
+	conn.Emit(dbusPath, dbusName+".ModemConnected", true)
+	log.Println("Sent modem connected signal.")
+	return nil
 }
 
 func startService(mc *ModemController) error {
