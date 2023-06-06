@@ -2,6 +2,7 @@ package modemlistener
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/godbus/dbus"
 )
@@ -21,7 +22,7 @@ type ModemSignal struct {
 // Return:
 // - chan bool: A channel that receives a boolean value when the "ModemConnected" signal is detected.
 // - error: An error if the function fails to establish the connection.
-func GetModemConnectedSignalListener() (chan bool, error) {
+func GetModemConnectedSignalListener() (chan time.Time, error) {
 	conn, err := dbus.SystemBus()
 	if err != nil {
 		return nil, err
@@ -36,11 +37,11 @@ func GetModemConnectedSignalListener() (chan bool, error) {
 	modemSignals := make(chan *dbus.Signal, 10)
 	conn.Signal(modemSignals)
 
-	modemConnectedSignals := make(chan bool, 10)
+	modemConnectedSignals := make(chan time.Time, 10)
 	go func() {
 		for v := range modemSignals {
 			if v.Path == dbus.ObjectPath(DBusPath) && v.Name == DBusInterface+".ModemConnected" {
-				modemConnectedSignals <- true
+				modemConnectedSignals <- time.Now()
 			}
 		}
 	}()
