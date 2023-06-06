@@ -22,12 +22,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
 	"github.com/TheCacophonyProject/go-config"
 	arg "github.com/alexflint/go-arg"
 	"periph.io/x/periph/host"
-
-	saltrequester "github.com/TheCacophonyProject/salt-updater"
 )
 
 func main() {
@@ -147,8 +144,7 @@ func runMain() error {
 						mc.lastSuccessfulPing = time.Now()
 						if connectionsFirstPing {
 							connectionsFirstPing = false
-							eventclient.UploadEvents() // Upload events each time connecting.
-							saltrequester.RunPing()    // Ping salt server triggering scheduled commands to run.
+							sendModemConnectedSignal() // This allows programs to trigger events when the modem connects.
 						}
 					} else {
 						log.Println("ping test failed")
