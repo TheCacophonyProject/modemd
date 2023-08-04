@@ -33,8 +33,8 @@ nfpms:
       dst: /etc/systemd/system/modemd.service
     - src: _release/org.cacophony.modemd.conf
       dst: /etc/dbus-1/system.d/org.cacophony.modemd.conf
-    - src: _release/uhubctl
-      dst: /usr/sbin/uhubctl
+    #- src: _release/uhubctl
+    #  dst: /usr/sbin/uhubctl
   scripts:
     postinstall: "_release/postinstall.sh"
 
