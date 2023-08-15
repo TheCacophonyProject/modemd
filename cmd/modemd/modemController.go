@@ -108,7 +108,7 @@ func (mc *ModemController) SetModemPower(on bool) error {
 		return err
 	}
 
-	pin := gpioreg.ByName("GPIO16")
+	pin := gpioreg.ByName("GPIO22")
 	if pin == nil {
 		return fmt.Errorf("failed to init GPIO16 pin")
 	}

@@ -7,16 +7,42 @@ release:
   name_template: '{{.Tag}}'
 
 builds:
-- goos:
+- id: modemd
+  goos:
   - linux
   goarch:
   - arm
   - arm64
   goarm:
   - "7"
-  main: .
+  main: ./cmd/modemd
   ldflags: -s -w -X main.version={{.Version}}
   binary: modemd
+
+- id: reception-logger
+  goos:
+  - linux
+  goarch:
+  - arm
+  - arm64
+  goarm:
+  - "7"
+  main: ./cmd/reception-logger
+  ldflags: -s -w -X main.version={{.Version}}
+  binary: reception-logger
+
+- id: check-gps
+  goos:
+  - linux
+  goarch:
+  - arm
+  - arm64
+  goarm:
+  - "7"
+  main: ./cmd/check-gps
+  ldflags: -s -w -X main.version={{.Version}}
+  binary: check-gps
+
 
 nfpms:
 - vendor: The Cacophony Project
