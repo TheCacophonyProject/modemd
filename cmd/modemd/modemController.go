@@ -173,22 +173,27 @@ func (mc *ModemController) TurnOnModem() error {
 }
 
 func (mc *ModemController) SetModemPower(on bool) error {
-	//TODO Change it to power on/off the USB modem through pin GPIO16, LOW is off.
 	if err := setUSBPower(on); err != nil {
 		return err
 	}
 
 	pin := gpioreg.ByName("GPIO22")
 	if pin == nil {
-		return fmt.Errorf("failed to init GPIO16 pin")
+		return fmt.Errorf("failed to init GPIO22 pin")
 	}
 	if on {
 		if err := pin.Out(gpio.High); err != nil {
 			return fmt.Errorf("failed to set modem power pin high: %v", err)
 		}
 	} else {
+		log.Println("powering off USB modem")
 		if err := pin.Out(gpio.Low); err != nil {
-			return fmt.Errorf("failed to set modem power pin high: %v", err)
+			return fmt.Errorf("failed to set modem power pin low: %v", err)
+		}
+		time.Sleep(2 * time.Second)
+		_, err := mc.RunATCommand("AT+CPOF", true)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
