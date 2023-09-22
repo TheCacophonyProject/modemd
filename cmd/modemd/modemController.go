@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os/exec"
 	"strings"
 	"time"
@@ -69,6 +70,12 @@ func (mc *ModemController) FindModem() bool {
 		case <-timeout:
 			return false
 		case <-time.After(time.Second):
+
+			usbMode, _ := mc.IsInUSBMode()
+			if !usbMode {
+				mc.EnableUSBMode()
+			}
+
 			for _, modemConfig := range mc.ModemsConfig {
 				cmd := exec.Command("lsusb", "-d", modemConfig.VendorProductID)
 				if err := cmd.Run(); err == nil {
@@ -78,6 +85,69 @@ func (mc *ModemController) FindModem() bool {
 			}
 		}
 	}
+}
+
+func (mc *ModemController) RunATCommand(cmd string, errorOnNoOK bool) (string, error) {
+	c := &serial.Config{Name: "/dev/ttyUSB2", Baud: 115200}
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return "", err
+	}
+	_, err = s.Write([]byte(cmd + "\r\n"))
+	if err != nil {
+		return "", err
+	}
+
+	buf := make([]byte, 128)
+	n, err := s.Read(buf)
+	if err != nil {
+		return "", err
+	}
+
+	// TODO make more robust
+	response := string(buf[:n])
+	response = strings.TrimSpace(response)
+	if errorOnNoOK && response != "OK" {
+		return response, fmt.Errorf("received response is not OK. Response: '%s'", response)
+	}
+
+	return response, nil
+}
+
+func (mc *ModemController) EnableUSBMode() error {
+	_, err := mc.RunATCommand("AT+CUSBPIDSWITCH=9011,1,1", true)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < 10; i++ {
+		time.Sleep(time.Second)
+		usbMode, err := mc.IsInUSBMode()
+		if err != nil {
+			return err
+		}
+		if usbMode {
+			return nil
+		}
+	}
+	return fmt.Errorf("failed to enable USB mode")
+}
+
+func (mc *ModemController) IsInUSBMode() (bool, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return false, fmt.Errorf("Failed to get network interfaces:", err)
+	}
+	for _, iface := range interfaces {
+		if iface.Name == "wwan0" {
+			log.Println("Found wwan0 interface.")
+			return false, nil
+		}
+		if iface.Name == "usb0" {
+			log.Println("Found usb0 interface.")
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf("Failed to find wwan0 or usb0 interface")
 }
 
 func (mc *ModemController) TurnOnModem() error {

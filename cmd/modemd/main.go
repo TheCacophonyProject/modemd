@@ -120,6 +120,15 @@ func runMain() error {
 		for mc.ShouldBeOn() {
 			if mc.FindModem() {
 				log.Printf("found modem %s\n", mc.Modem.Name)
+				usbMode, err := mc.IsInUSBMode()
+				if err != nil {
+					return err
+				}
+				if !usbMode {
+					if err := mc.EnableUSBMode(); err != nil {
+						return err
+					}
+				}
 				break
 			}
 			retries--
