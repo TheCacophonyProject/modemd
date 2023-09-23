@@ -135,7 +135,7 @@ func (mc *ModemController) EnableUSBMode() error {
 func (mc *ModemController) IsInUSBMode() (bool, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return false, fmt.Errorf("Failed to get network interfaces:", err)
+		return false, fmt.Errorf("Failed to get network interfaces: %w", err)
 	}
 	for _, iface := range interfaces {
 		if iface.Name == "wwan0" {
