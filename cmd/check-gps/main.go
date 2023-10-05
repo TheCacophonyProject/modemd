@@ -171,7 +171,7 @@ func processGPSOut(parts []string) (*gpsData, error) {
 func runATCommand(atCommand string) (string, error) {
 	log.Printf("Running '%s'", atCommand)
 
-	c := &serial.Config{Name: "/dev/ttyUSB3", Baud: 115200}
+	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
 	s, err := serial.OpenPort(c)
 	if err != nil {
 		log.Fatal(err)

@@ -66,7 +66,7 @@ func readBand() (string, error) {
 func runATCommand(atCommand string) (string, error) {
 	//log.Printf("Running '%s'", atCommand)
 
-	c := &serial.Config{Name: "/dev/ttyUSB2", Baud: 115200}
+	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
 	s, err := serial.OpenPort(c)
 	if err != nil {
 		log.Fatal(err)
@@ -82,7 +82,6 @@ func runATCommand(atCommand string) (string, error) {
 	reader := bufio.NewReader(s)
 	failed := false
 	for {
-		//TODO Add timeout check
 		line, err := reader.ReadString('\n')
 		line = strings.TrimSpace(line)
 		if err != nil {

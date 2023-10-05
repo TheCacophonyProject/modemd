@@ -6,6 +6,8 @@ if ! command -v nslookup &> /dev/null; then
   exit 1
 fi
 
+udevadm control --reload-rules
+
 systemctl daemon-reload
 systemctl enable modemd.service
 systemctl restart modemd.service

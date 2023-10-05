@@ -1,12 +1,8 @@
 package main
 
 import (
-	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
-	"net/http/cookiejar"
 	"os/exec"
 	"strings"
 	"time"
@@ -72,13 +68,6 @@ func (m *Modem) IsDefaultRoute() (bool, error) {
 	return false, nil
 }
 
-type responseHolder struct {
-	response
-}
-type response struct {
-	SignalIcon int
-}
-
 func (m *Modem) WaitForConnection(timeout int) (bool, error) {
 	start := time.Now()
 	for {
@@ -89,38 +78,9 @@ func (m *Modem) WaitForConnection(timeout int) (bool, error) {
 		if def {
 			return true, nil
 		}
-		if time.Now().Sub(start) > time.Second*time.Duration(timeout) {
+		if time.Since(start) > time.Second*time.Duration(timeout) {
 			return false, nil
 		}
 		time.Sleep(time.Second)
 	}
-}
-
-func (m *Modem) signalStrengthHuawei() (int, error) {
-	cookieJar, err := cookiejar.New(nil)
-	if err != nil {
-		return 0, err
-	}
-	client := &http.Client{
-		Jar:     cookieJar,
-		Timeout: time.Second * 10,
-	}
-	_, err = client.Get("http://192.168.8.1") // Goto homepage first to get cookie for API request
-	if err != nil {
-		return 0, err
-	}
-	resp, err := client.Get("http://192.168.8.1" + "/api/monitoring/status")
-	if err != nil {
-		return 0, err
-	}
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-	var r responseHolder
-	err = xml.Unmarshal(bodyBytes, &r)
-	if err != nil {
-		return 0, err
-	}
-	return r.SignalIcon, nil
 }

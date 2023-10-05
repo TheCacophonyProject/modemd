@@ -81,3 +81,19 @@ func (s service) StayOn() *dbus.Error {
 	s.mc.NewOnRequest()
 	return nil
 }
+
+func (s service) GetStatus() (map[string]interface{}, *dbus.Error) {
+	status, err := s.mc.GetStatus()
+	if err != nil {
+		log.Println(err)
+		return nil, makeDbusError("GetStatus", err)
+	}
+	return status, nil
+}
+
+func makeDbusError(name string, err error) *dbus.Error {
+	return &dbus.Error{
+		Name: dbusName + name,
+		Body: []interface{}{err.Error()},
+	}
+}

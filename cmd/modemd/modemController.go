@@ -19,11 +19,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,10 +59,199 @@ type ModemController struct {
 	lastFailedFindModem  time.Time
 	connectedTime        time.Time
 	onOffReason          string
+	IsPowered            bool
 }
 
 func (mc *ModemController) NewOnRequest() {
 	mc.lastOnRequestTime = time.Now()
+}
+
+func (mc *ModemController) EnableGPS() error {
+	_, err := mc.RunATCommand("AT+CGPS=1")
+	return err
+}
+
+func (mc *ModemController) DisableGPS() error {
+	_, err := mc.RunATCommand("AT+CGPS=0")
+	return err
+}
+
+type gpsData struct {
+	latitude    float64
+	longitude   float64
+	utcDateTime time.Time
+	altitude    float64
+	speed       float64
+	course      float64
+}
+
+// Convert to a map that is compatible with DBus
+func (g *gpsData) ToDBusMap() map[string]interface{} {
+	return map[string]interface{}{
+		"latitude":    g.latitude,
+		"longitude":   g.longitude,
+		"utcDateTime": g.utcDateTime.Format("2006-01-02 15:04:05"),
+		"altitude":    g.altitude,
+		"speed":       g.speed,
+		"course":      g.course,
+	}
+}
+
+func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
+	out, err := mc.RunATCommand("AT+CGPSINFO")
+	if err != nil {
+		return nil, err
+	}
+	log.Println(out)
+	out = strings.TrimSpace(out)
+	out = strings.TrimPrefix(out, "+CGPSINFO:")
+	out = strings.TrimSpace(out)
+	parts := strings.Split(out, ",")
+	if len(parts) < 8 {
+		return nil, fmt.Errorf("invalid GPS format")
+	}
+	latRaw := parts[0]
+	latNSRaw := parts[1]
+	longRaw := parts[2]
+	longEWRaw := parts[3]
+	utcDateRaw := parts[4]
+	utcTimeRaw := parts[5]
+	altitudeRaw := parts[6]
+	speedRaw := parts[7]
+	courseRaw := parts[8]
+	//log.Println("latRaw:", latRaw)
+	//log.Println("latNSRaw:", latNSRaw)
+	//log.Println("longRaw:", longRaw)
+	//log.Println("longEW:", longEWRaw)
+	//log.Println("utcDateRaw:", utcDateRaw)
+	//log.Println("utcTimeRaw:", utcTimeRaw)
+	//log.Println("altitude:", altitudeRaw)
+	//log.Println("speed:", speedRaw)
+	//log.Println("course:", courseRaw)
+
+	if latRaw == "" {
+		return nil, fmt.Errorf("no GPS data available")
+	}
+	if string(latRaw[4]) != "." {
+		return nil, fmt.Errorf("invalid latitude")
+	}
+	latDeg, err := strconv.ParseFloat(latRaw[:2], 64)
+	if err != nil {
+		return nil, err
+	}
+	latMinute, err := strconv.ParseFloat(latRaw[2:], 64)
+	if err != nil {
+		return nil, err
+	}
+	latDeg += latMinute / 60
+	if latNSRaw == "S" {
+		latDeg *= -1
+	} else if latNSRaw != "N" {
+		return nil, fmt.Errorf("invalid latitude direction")
+	}
+	log.Println("latDeg:", latDeg)
+
+	if string(longRaw[5]) != "." {
+		return nil, fmt.Errorf("invalid longitude")
+	}
+	longDeg, err := strconv.ParseFloat(longRaw[:3], 64)
+	if err != nil {
+		return nil, err
+	}
+	longMinute, err := strconv.ParseFloat(longRaw[3:], 64)
+	if err != nil {
+		return nil, err
+	}
+	longDeg += longMinute / 60
+	if longEWRaw == "W" {
+		latDeg *= -1
+	} else if longEWRaw != "E" {
+		return nil, fmt.Errorf("invalid longitude direction")
+	}
+	log.Println("longDeg:", longDeg)
+
+	const layout = "020106-150405.0" // format DDMMYY-hhmmss.s
+	dateTime, err := time.Parse(layout, utcDateRaw+"-"+utcTimeRaw)
+	log.Println(dateTime.Local().Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return nil, err
+	}
+
+	altitude, err := strconv.ParseFloat(altitudeRaw, 64)
+	if err != nil {
+		return nil, err
+	}
+	log.Println(altitude)
+
+	speed, err := strconv.ParseFloat(speedRaw, 64)
+	if err != nil {
+		return nil, err
+	}
+	log.Println(speed)
+
+	var course float64
+	if courseRaw != "" {
+		course, err = strconv.ParseFloat(courseRaw, 64)
+		if err != nil {
+			return nil, err
+		}
+	}
+	log.Println(course)
+
+	return &gpsData{
+		latitude:    latDeg,
+		longitude:   longDeg,
+		utcDateTime: dateTime,
+		altitude:    altitude,
+		speed:       speed,
+		course:      course,
+	}, nil
+}
+
+func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
+	status := make(map[string]interface{})
+	status["time"] = time.Now().Format(time.RFC1123Z)
+	if mc.Modem != nil {
+		status["name"] = mc.Modem.Name
+		status["netdev"] = mc.Modem.Netdev
+		status["vendor"] = mc.Modem.VendorProduct
+	}
+	status["powered"] = mc.IsPowered
+	status["simCardStatus"] = valueOrErrorStr(mc.CheckSimCard())
+	status["band"] = valueOrErrorStr(mc.readBand())
+	status["signalStrength"] = valueOrErrorStr(mc.signalStrength())
+	if gpsData, err := mc.GetGPSStatus(); err != nil {
+		status["GPS"] = err.Error()
+	} else {
+		status["GPS"] = gpsData.ToDBusMap()
+	}
+	status["onOffReason"] = mc.onOffReason
+	status["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
+	log.Println(status)
+	return status, nil
+}
+
+func valueOrErrorStr(s interface{}, e error) interface{} {
+	if e != nil {
+		log.Println(e)
+		return fmt.Sprintf("%s: %s", s, e.Error())
+	}
+	return s
+}
+
+func (mc *ModemController) CheckSimCard() (string, error) {
+	// Enable verbose error messages.
+	_, err := mc.RunATCommand("AT+CMEE=2")
+	if err != nil {
+		return "", err
+	}
+	out, err := mc.RunATCommand("AT+CPIN?")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimPrefix(out, "+CPIN:")
+	out = strings.TrimSpace(out)
+	return out, nil
 }
 
 func (mc *ModemController) FindModem() bool {
@@ -87,25 +278,103 @@ func (mc *ModemController) FindModem() bool {
 	}
 }
 
-func (mc *ModemController) RunATCommand(cmd string, errorOnNoOK bool) (string, error) {
-	c := &serial.Config{Name: "/dev/ttyUSB2", Baud: 115200}
+func (mc *ModemController) signalStrength() (string, error) {
+	out, err := mc.RunATCommand("AT+CSQ")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimPrefix(out, "+CSQ:")
+	out = strings.TrimSpace(out)
+
+	parts := strings.Split(out, ",")
+	if len(parts) > 1 {
+		return parts[0], nil
+	} else {
+		log.Fatal(fmt.Errorf("unable to read reception, '%s'", out))
+	}
+	return out, nil
+}
+
+func (mc *ModemController) readBand() (string, error) {
+	out, err := mc.RunATCommand("AT+CPSI?")
+	if err != nil {
+		return "", err
+	}
+	//log.Println(string(out))
+	parts := strings.Split(out, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.Contains(part, "BAND") {
+			return part, nil
+		}
+	}
+
+	return "", err
+}
+
+func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
+	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
 	s, err := serial.OpenPort(c)
 	if err != nil {
 		return "", err
 	}
-	_, err = s.Write([]byte(cmd + "\r\n"))
+	defer s.Close()
+	s.Flush()
+
+	_, err = s.Write([]byte(atCommand + "\r"))
 	if err != nil {
 		return "", err
 	}
 
-	buf := make([]byte, 128)
+	reader := bufio.NewReader(s)
+	failed := false
+	for {
+		line, err := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if err != nil {
+			return "", err
+		}
+		if line == "ERROR" {
+			failed = true
+			break
+		}
+		if line == "OK" {
+			break
+		}
+		if strings.HasPrefix(line, "+") {
+			return line, nil
+		}
+	}
+	if failed {
+		return "", fmt.Errorf("AT command failed")
+	}
+	return "", nil
+}
+
+func (mc *ModemController) RunATCommandOld(cmd string, errorOnNoOK bool) (string, error) {
+	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
+	s, err := serial.OpenPort(c)
+	if err != nil {
+		return "", err
+	}
+
+	s.Flush()
+
+	_, err = s.Write([]byte(cmd + "\r"))
+	if err != nil {
+		return "", err
+	}
+
+	buf := make([]byte, 1280)
 	n, err := s.Read(buf)
+
 	if err != nil {
 		return "", err
 	}
 
 	// TODO make more robust
 	response := string(buf[:n])
+
 	response = strings.TrimSpace(response)
 	if errorOnNoOK && response != "OK" {
 		return response, fmt.Errorf("received response is not OK. Response: '%s'", response)
@@ -115,7 +384,7 @@ func (mc *ModemController) RunATCommand(cmd string, errorOnNoOK bool) (string, e
 }
 
 func (mc *ModemController) EnableUSBMode() error {
-	_, err := mc.RunATCommand("AT+CUSBPIDSWITCH=9011,1,1", true)
+	_, err := mc.RunATCommand("AT+CUSBPIDSWITCH=9011,1,1")
 	if err != nil {
 		return err
 	}
@@ -135,7 +404,7 @@ func (mc *ModemController) EnableUSBMode() error {
 func (mc *ModemController) IsInUSBMode() (bool, error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return false, fmt.Errorf("Failed to get network interfaces: %w", err)
+		return false, fmt.Errorf("failed to get network interfaces: %w", err)
 	}
 	for _, iface := range interfaces {
 		if iface.Name == "wwan0" {
@@ -147,36 +416,10 @@ func (mc *ModemController) IsInUSBMode() (bool, error) {
 			return true, nil
 		}
 	}
-	return false, fmt.Errorf("Failed to find wwan0 or usb0 interface")
-}
-
-func (mc *ModemController) TurnOnModem() error {
-	c := &serial.Config{Name: "/dev/ttyUSB2", Baud: 115200}
-	s, err := serial.OpenPort(c)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.Write([]byte("AT\r"))
-	if err != nil {
-		return err
-	}
-
-	buf := make([]byte, 128)
-	n, err := s.Read(buf)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(buf[:n]))
-	return nil
+	return false, fmt.Errorf("failed to find wwan0 or usb0 interface")
 }
 
 func (mc *ModemController) SetModemPower(on bool) error {
-	if err := setUSBPower(on); err != nil {
-		return err
-	}
-
 	pin := gpioreg.ByName("GPIO22")
 	if pin == nil {
 		return fmt.Errorf("failed to init GPIO22 pin")
@@ -190,12 +433,13 @@ func (mc *ModemController) SetModemPower(on bool) error {
 		if err := pin.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
-		time.Sleep(2 * time.Second)
-		_, err := mc.RunATCommand("AT+CPOF", true)
-		if err != nil {
-			return err
-		}
+		_, _ = mc.RunATCommand("AT+CPOF")
+		//TODO Check that modem has powered off by checking if /dev/UsbModemAT exists
 	}
+	if err := setUSBPower(on); err != nil {
+		return err
+	}
+	mc.IsPowered = on
 	return nil
 }
 

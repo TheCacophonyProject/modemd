@@ -59,6 +59,8 @@ nfpms:
       dst: /etc/systemd/system/modemd.service
     - src: _release/org.cacophony.modemd.conf
       dst: /etc/dbus-1/system.d/org.cacophony.modemd.conf
+    - src: _release/99-modem-udev.rules
+      dst: /etc/udev/rules.d/99-modem-udev.rules
     #- src: _release/uhubctl
     #  dst: /usr/sbin/uhubctl
   scripts:
