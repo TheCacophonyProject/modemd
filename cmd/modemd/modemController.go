@@ -236,6 +236,13 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		status["provider"] = provider
 		status["tech"] = tech
 	}
+	status["ICCID"] = valueOrErrorStr(mc.readSimICCID())
+	status["temp"] = valueOrErrorStr(mc.readTemp())
+	status["simProvider"] = valueOrErrorStr(mc.readSimProvider())
+	status["manufacturer"] = valueOrErrorStr(mc.getManufacturer())
+	status["model"] = valueOrErrorStr(mc.getModel())
+	status["serial"] = valueOrErrorStr(mc.getSerialNumber())
+
 	log.Println(status)
 	return status, nil
 }
@@ -292,6 +299,77 @@ func (mc *ModemController) readProvider() (string, string, error) {
 	}
 	return strings.Trim(items[2], "\""), accessTechnology, nil
 }
+
+func (mc *ModemController) readSimICCID() (string, error) {
+	out, err := mc.RunATCommand("AT+CICCID")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimPrefix(out, "+ICCID:")
+	out = strings.TrimSpace(out)
+	return out, nil
+}
+
+func (mc *ModemController) readTemp() (int, error) {
+	out, err := mc.RunATCommand("AT+CPMUTEMP")
+	if err != nil {
+		return 0, err
+	}
+	out = strings.TrimPrefix(out, "+CPMUTEMP:")
+	out = strings.TrimSpace(out)
+	return strconv.Atoi(out)
+}
+
+func (mc *ModemController) readSimProvider() (string, error) {
+	out, err := mc.RunATCommand("AT+CSPN?")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimPrefix(out, "+CSPN:")
+	out = strings.TrimSpace(out)
+	parts := strings.Split(out, ",")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid CSPN format %s", out)
+	}
+	return strings.Trim(parts[0], "\""), nil
+}
+
+func (mc *ModemController) getManufacturer() (string, error) {
+	out, err := mc.RunATCommand("AT+CGMI")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func (mc *ModemController) getModel() (string, error) {
+	out, err := mc.RunATCommand("AT+CGMR")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimPrefix(out, "+CGMR:")
+	out = strings.TrimSpace(out)
+	return out, nil
+}
+
+func (mc *ModemController) getSerialNumber() (string, error) {
+	out, err := mc.RunATCommand("AT+CGSN")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimSpace(out)
+	return out, nil
+}
+
+// TODO Look into more functionality to add
+//3.2.4 AT+CSIM Generic SIM access
+//3.2.5 AT+CRSM Restricted SIM access
+// 3.2.20 AT+SIMEI Set IMEI for the module
+// 4.2.12 AT+CNBP Preferred band selection
+// 4.2.15 AT+CNSMOD Show network system mode
+// GPS only mode?
+// 9.1 Overview of AT Commands for SMS Control
+// Firmware upgrades?
 
 func (mc *ModemController) CheckSimCard() (string, error) {
 	// Enable verbose error messages.
@@ -374,7 +452,12 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 	}
 	defer s.Close()
 	s.Flush()
-
+	_, err = s.Write([]byte("ATE0\r"))
+	if err != nil {
+		return "", err
+	}
+	time.Sleep(time.Millisecond * 10)
+	s.Flush()
 	_, err = s.Write([]byte(atCommand + "\r"))
 	if err != nil {
 		return "", err
@@ -382,9 +465,11 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 
 	reader := bufio.NewReader(s)
 	failed := false
+	total := ""
 	for {
 		line, err := reader.ReadString('\n')
 		line = strings.TrimSpace(line)
+		total += line
 		if err != nil {
 			return "", err
 		}
@@ -395,7 +480,8 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 		if line == "OK" {
 			break
 		}
-		if strings.HasPrefix(line, "+") {
+		if len(line) > 0 {
+			log.Println(line)
 			return line, nil
 		}
 	}
