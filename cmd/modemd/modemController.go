@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	goconfig "github.com/TheCacophonyProject/go-config"
@@ -60,6 +61,8 @@ type ModemController struct {
 	connectedTime        time.Time
 	onOffReason          string
 	IsPowered            bool
+
+	mu sync.Mutex
 }
 
 func (mc *ModemController) NewOnRequest() {
@@ -455,6 +458,8 @@ func (mc *ModemController) readBand() (string, error) {
 }
 
 func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
 	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
 	s, err := serial.OpenPort(c)
 	if err != nil {
