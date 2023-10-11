@@ -227,6 +227,15 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 	}
 	status["onOffReason"] = mc.onOffReason
 	status["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
+	status["voltage"] = valueOrErrorStr(mc.readVoltage())
+	provider, tech, err := mc.readProvider()
+	if err != nil {
+		status["provider"] = err.Error()
+		status["tech"] = err.Error()
+	} else {
+		status["provider"] = provider
+		status["tech"] = tech
+	}
 	log.Println(status)
 	return status, nil
 }
@@ -237,6 +246,51 @@ func valueOrErrorStr(s interface{}, e error) interface{} {
 		return fmt.Sprintf("%s: %s", s, e.Error())
 	}
 	return s
+}
+
+func (mc *ModemController) readVoltage() (float64, error) {
+	out, err := mc.RunATCommand("AT+CBC")
+	if err != nil {
+		return 0, err
+	}
+	// will be of format "+CBC: 3.305V"
+	out = strings.TrimSpace(out)
+	out = strings.TrimPrefix(out, "+CBC:")
+	out = strings.TrimSuffix(out, "V")
+	out = strings.TrimSpace(out)
+	return strconv.ParseFloat(out, 64)
+}
+
+func (mc *ModemController) readProvider() (string, string, error) {
+	//+COPS: 0,0,"Spark NZ Spark NZ",7
+	out, err := mc.RunATCommand("AT+COPS?")
+	if err != nil {
+		return "", "", err
+	}
+	out = strings.TrimPrefix(out, "+COPS:")
+	out = strings.TrimSpace(out)
+	items := strings.Split(out, ",")
+	if len(items) < 4 {
+		return "", "", fmt.Errorf("invalid COPS format %s", out)
+	}
+	accessTechnologyCode, err := strconv.Atoi(items[3])
+	if err != nil {
+		return "", "", err
+	}
+	accessTechnology := "Unknown"
+	switch accessTechnologyCode {
+	case 0:
+		accessTechnology = "GSM"
+	case 1:
+		accessTechnology = "GSM Compact"
+	case 2:
+		accessTechnology = "3G"
+	case 7:
+		accessTechnology = "4G"
+	case 8:
+		accessTechnology = "CDMA/HDR"
+	}
+	return strings.Trim(items[2], "\""), accessTechnology, nil
 }
 
 func (mc *ModemController) CheckSimCard() (string, error) {
