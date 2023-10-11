@@ -210,38 +210,48 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 
 func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 	status := make(map[string]interface{})
-	status["time"] = time.Now().Format(time.RFC1123Z)
-	if mc.Modem != nil {
-		status["name"] = mc.Modem.Name
-		status["netdev"] = mc.Modem.Netdev
-		status["vendor"] = mc.Modem.VendorProduct
-	}
+	status["timestamp"] = time.Now().Format(time.RFC1123Z)
 	status["powered"] = mc.IsPowered
-	status["simCardStatus"] = valueOrErrorStr(mc.CheckSimCard())
-	status["band"] = valueOrErrorStr(mc.readBand())
-	status["signalStrength"] = valueOrErrorStr(mc.signalStrength())
-	if gpsData, err := mc.GetGPSStatus(); err != nil {
-		status["GPS"] = err.Error()
-	} else {
-		status["GPS"] = gpsData.ToDBusMap()
-	}
 	status["onOffReason"] = mc.onOffReason
-	status["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
-	status["voltage"] = valueOrErrorStr(mc.readVoltage())
-	provider, tech, err := mc.readProvider()
-	if err != nil {
-		status["provider"] = err.Error()
-		status["tech"] = err.Error()
-	} else {
-		status["provider"] = provider
-		status["tech"] = tech
+
+	if mc.Modem != nil {
+		modem := make(map[string]interface{})
+		modem["name"] = mc.Modem.Name
+		modem["netdev"] = mc.Modem.Netdev
+		modem["vendor"] = mc.Modem.VendorProduct
+		modem["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
+		modem["voltage"] = valueOrErrorStr(mc.readVoltage())
+		modem["temp"] = valueOrErrorStr(mc.readTemp())
+		modem["manufacturer"] = valueOrErrorStr(mc.getManufacturer())
+		modem["model"] = valueOrErrorStr(mc.getModel())
+		modem["serial"] = valueOrErrorStr(mc.getSerialNumber())
+		status["modem"] = modem
+
+		signal := make(map[string]interface{})
+		signal["strength"] = valueOrErrorStr(mc.signalStrength())
+		signal["band"] = valueOrErrorStr(mc.readBand())
+		provider, accessTechnology, err := mc.readProvider()
+		if err != nil {
+			signal["provider"] = err.Error()
+			signal["accessTechnology"] = err.Error()
+		} else {
+			signal["provider"] = provider
+			signal["accessTechnology"] = accessTechnology
+		}
+		status["signal"] = signal
+
+		simCard := make(map[string]interface{})
+		simCard["simCardStatus"] = valueOrErrorStr(mc.CheckSimCard())
+		simCard["ICCID"] = valueOrErrorStr(mc.readSimICCID())
+		simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
+		status["simCard"] = simCard
+
+		if gpsData, err := mc.GetGPSStatus(); err != nil {
+			status["GPS"] = err.Error()
+		} else {
+			status["GPS"] = gpsData.ToDBusMap()
+		}
 	}
-	status["ICCID"] = valueOrErrorStr(mc.readSimICCID())
-	status["temp"] = valueOrErrorStr(mc.readTemp())
-	status["simProvider"] = valueOrErrorStr(mc.readSimProvider())
-	status["manufacturer"] = valueOrErrorStr(mc.getManufacturer())
-	status["model"] = valueOrErrorStr(mc.getModel())
-	status["serial"] = valueOrErrorStr(mc.getSerialNumber())
 
 	log.Println(status)
 	return status, nil
