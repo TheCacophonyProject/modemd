@@ -3,3 +3,5 @@
 ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9011", ENV{MODEM}="1"
 # Rule to check that it is the interface that can accept AT commands (bInterfaceNumber==04).
 ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM}=="1", ATTRS{bInterfaceNumber}=="04", SYMLINK+="UsbModemAT"
+# Rule to check that it is the interface that can accept AT commands (bInterfaceNumber==04).
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM}=="1", ATTRS{bInterfaceNumber}=="05", SYMLINK+="UsbModemAT2"
