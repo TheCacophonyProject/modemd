@@ -59,6 +59,7 @@ type ModemController struct {
 	lastFailedConnection time.Time
 	lastFailedFindModem  time.Time
 	connectedTime        time.Time
+	stayOnUntil          time.Time
 	onOffReason          string
 	IsPowered            bool
 
@@ -67,6 +68,11 @@ type ModemController struct {
 
 func (mc *ModemController) NewOnRequest() {
 	mc.lastOnRequestTime = time.Now()
+}
+
+func (mc *ModemController) StayOnUntil(onUntil time.Time) error {
+	mc.stayOnUntil = onUntil
+	return nil
 }
 
 func (mc *ModemController) EnableGPS() error {
@@ -105,7 +111,7 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println(out)
+	//log.Println(out)
 	out = strings.TrimSpace(out)
 	out = strings.TrimPrefix(out, "+CGPSINFO:")
 	out = strings.TrimSpace(out)
@@ -152,7 +158,7 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 	} else if latNSRaw != "N" {
 		return nil, fmt.Errorf("invalid latitude direction")
 	}
-	log.Println("latDeg:", latDeg)
+	//log.Println("latDeg:", latDeg)
 
 	if string(longRaw[5]) != "." {
 		return nil, fmt.Errorf("invalid longitude")
@@ -171,11 +177,11 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 	} else if longEWRaw != "E" {
 		return nil, fmt.Errorf("invalid longitude direction")
 	}
-	log.Println("longDeg:", longDeg)
+	//log.Println("longDeg:", longDeg)
 
 	const layout = "020106-150405.0" // format DDMMYY-hhmmss.s
 	dateTime, err := time.Parse(layout, utcDateRaw+"-"+utcTimeRaw)
-	log.Println(dateTime.Local().Format("2006-01-02 15:04:05"))
+	//log.Println(dateTime.Local().Format("2006-01-02 15:04:05"))
 	if err != nil {
 		return nil, err
 	}
@@ -184,13 +190,13 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println(altitude)
+	//log.Println(altitude)
 
 	speed, err := strconv.ParseFloat(speedRaw, 64)
 	if err != nil {
 		return nil, err
 	}
-	log.Println(speed)
+	//log.Println(speed)
 
 	var course float64
 	if courseRaw != "" {
@@ -199,7 +205,7 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 			return nil, err
 		}
 	}
-	log.Println(course)
+	//log.Println(course)
 
 	return &gpsData{
 		latitude:    latDeg,
@@ -256,7 +262,6 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		}
 	}
 
-	log.Println(status)
 	return status, nil
 }
 
@@ -435,9 +440,8 @@ func (mc *ModemController) signalStrength() (string, error) {
 	if len(parts) > 1 {
 		return parts[0], nil
 	} else {
-		log.Fatal(fmt.Errorf("unable to read reception, '%s'", out))
+		return "", fmt.Errorf("unable to read reception, '%s'", out)
 	}
-	return out, nil
 }
 
 func (mc *ModemController) readBand() (string, error) {
@@ -496,7 +500,7 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 			break
 		}
 		if len(line) > 0 {
-			log.Println(line)
+			//log.Println(line)
 			return line, nil
 		}
 	}
@@ -655,6 +659,10 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
 		return false, fmt.Sprintf("modem shouldn't retry connection for %v", mc.RetryInterval)
+	}
+
+	if time.Now().Before(mc.stayOnUntil) {
+		return true, fmt.Sprintf("modem should be on because it was requested to stay on until %s", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
 	}
 
 	if time.Since(mc.StartTime) < mc.InitialOnDuration {

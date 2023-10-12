@@ -21,6 +21,7 @@ package main
 import (
 	"errors"
 	"log"
+	"time"
 
 	"github.com/godbus/dbus"
 	"github.com/godbus/dbus/introspect"
@@ -79,6 +80,14 @@ func genIntrospectable(v interface{}) introspect.Introspectable {
 // StayOn will keep the modem on for a set amount of time
 func (s service) StayOn() *dbus.Error {
 	s.mc.NewOnRequest()
+	return nil
+}
+
+func (s service) StayOnFor(minutes int) *dbus.Error {
+	err := s.mc.StayOnUntil(time.Now().Add(time.Duration(minutes) * time.Minute))
+	if err != nil {
+		return makeDbusError("StayOnFor", err)
+	}
 	return nil
 }
 
