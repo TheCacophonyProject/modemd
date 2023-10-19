@@ -75,8 +75,21 @@ func (mc *ModemController) StayOnUntil(onUntil time.Time) error {
 	return nil
 }
 
+func (mc *ModemController) gpsEnabled() (bool, error) {
+	out, err := mc.RunATCommand("AT+CGPS?")
+	log.Println(out)
+	return out == "+CGPS: 1,1", err
+}
+
 func (mc *ModemController) EnableGPS() error {
-	_, err := mc.RunATCommand("AT+CGPS=1")
+	enabled, err := mc.gpsEnabled()
+	if err != nil {
+		return err
+	}
+	if enabled {
+		return nil
+	}
+	_, err = mc.RunATCommand("AT+CGPS=1")
 	return err
 }
 
@@ -255,7 +268,11 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
 		status["simCard"] = simCard
 
-		if gpsData, err := mc.GetGPSStatus(); err != nil {
+		if gpsEnabled, err := mc.gpsEnabled(); err != nil {
+			status["GPS"] = err.Error()
+		} else if !gpsEnabled {
+			status["GPS"] = "GPS off"
+		} else if gpsData, err := mc.GetGPSStatus(); err != nil {
 			status["GPS"] = err.Error()
 		} else {
 			status["GPS"] = gpsData.ToDBusMap()

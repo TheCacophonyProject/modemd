@@ -100,6 +100,22 @@ func (s service) GetStatus() (map[string]interface{}, *dbus.Error) {
 	return status, nil
 }
 
+func (s service) GPSOn() *dbus.Error {
+	err := s.mc.EnableGPS()
+	if err != nil {
+		return makeDbusError("GPSOn", err)
+	}
+	return nil
+}
+
+func (s service) GPSOff() *dbus.Error {
+	err := s.mc.DisableGPS()
+	if err != nil {
+		return makeDbusError("GPSOff", err)
+	}
+	return nil
+}
+
 func makeDbusError(name string, err error) *dbus.Error {
 	return &dbus.Error{
 		Name: dbusName + name,
