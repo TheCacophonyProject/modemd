@@ -72,6 +72,7 @@ func (mc *ModemController) NewOnRequest() {
 
 func (mc *ModemController) StayOnUntil(onUntil time.Time) error {
 	mc.stayOnUntil = onUntil
+	log.Println("dbus request to keep modem on until", onUntil.Format(time.DateTime))
 	return nil
 }
 
@@ -431,7 +432,9 @@ func (mc *ModemController) FindModem() bool {
 
 			usbMode, _ := mc.IsInUSBMode()
 			if !usbMode {
-				mc.EnableUSBMode()
+				if err := mc.EnableUSBMode(); err != nil {
+					log.Println(err)
+				}
 			}
 
 			for _, modemConfig := range mc.ModemsConfig {
@@ -560,6 +563,7 @@ func (mc *ModemController) RunATCommandOld(cmd string, errorOnNoOK bool) (string
 }
 
 func (mc *ModemController) EnableUSBMode() error {
+	log.Println("Enabling  USB mode on modem")
 	_, err := mc.RunATCommand("AT+CUSBPIDSWITCH=9011,1,1")
 	if err != nil {
 		return err
