@@ -674,16 +674,16 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
+	if time.Now().Before(mc.stayOnUntil) {
+		return true, fmt.Sprintf("modem should be on because it was requested to stay on until %s", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
+	}
+
 	if time.Since(mc.lastFailedFindModem) < mc.RetryFindModemInterval {
 		return false, fmt.Sprintf("shouldn't retry finding modem for %v", mc.RetryFindModemInterval)
 	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
 		return false, fmt.Sprintf("modem shouldn't retry connection for %v", mc.RetryInterval)
-	}
-
-	if time.Now().Before(mc.stayOnUntil) {
-		return true, fmt.Sprintf("modem should be on because it was requested to stay on until %s", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
 	}
 
 	if time.Since(mc.StartTime) < mc.InitialOnDuration {
