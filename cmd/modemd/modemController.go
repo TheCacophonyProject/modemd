@@ -76,12 +76,15 @@ func (mc *ModemController) StayOnUntil(onUntil time.Time) error {
 	return nil
 }
 
+/*
 func (mc *ModemController) gpsEnabled() (bool, error) {
 	out, err := mc.RunATCommand("AT+CGPS?")
 	log.Println(out)
 	return out == "+CGPS: 1,1", err
 }
+*/
 
+/*
 func (mc *ModemController) EnableGPS() error {
 	enabled, err := mc.gpsEnabled()
 	if err != nil {
@@ -93,12 +96,14 @@ func (mc *ModemController) EnableGPS() error {
 	_, err = mc.RunATCommand("AT+CGPS=1")
 	return err
 }
+*/
 
 func (mc *ModemController) DisableGPS() error {
 	_, err := mc.RunATCommand("AT+CGPS=0")
 	return err
 }
 
+/*
 type gpsData struct {
 	latitude    float64
 	longitude   float64
@@ -119,7 +124,9 @@ func (g *gpsData) ToDBusMap() map[string]interface{} {
 		"course":      g.course,
 	}
 }
+*/
 
+/*
 func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 	out, err := mc.RunATCommand("AT+CGPSINFO")
 	if err != nil {
@@ -230,6 +237,7 @@ func (mc *ModemController) GetGPSStatus() (*gpsData, error) {
 		course:      course,
 	}, nil
 }
+*/
 
 func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 	status := make(map[string]interface{})
@@ -269,15 +277,17 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
 		status["simCard"] = simCard
 
-		if gpsEnabled, err := mc.gpsEnabled(); err != nil {
-			status["GPS"] = err.Error()
-		} else if !gpsEnabled {
-			status["GPS"] = "GPS off"
-		} else if gpsData, err := mc.GetGPSStatus(); err != nil {
-			status["GPS"] = err.Error()
-		} else {
-			status["GPS"] = gpsData.ToDBusMap()
-		}
+		/*
+			if gpsEnabled, err := mc.gpsEnabled(); err != nil {
+				status["GPS"] = err.Error()
+			} else if !gpsEnabled {
+				status["GPS"] = "GPS off"
+			} else if gpsData, err := mc.GetGPSStatus(); err != nil {
+				status["GPS"] = err.Error()
+			} else {
+				status["GPS"] = gpsData.ToDBusMap()
+			}
+		*/
 	}
 
 	return status, nil
@@ -427,10 +437,20 @@ func (mc *ModemController) FindModem() bool {
 	for {
 		select {
 		case <-timeout:
+			log.Printf("Failed to find modem, here are the usb devices on the system:")
+			out, err := exec.Command("lsusb").CombinedOutput()
+			if err != nil {
+				log.Println(err)
+				return false
+			}
+			log.Println(string(out))
 			return false
 		case <-time.After(time.Second):
-
-			usbMode, _ := mc.IsInUSBMode()
+			// Have to enable USB mode or else the VendorProductID will be different and it won't be found.
+			usbMode, err := mc.IsInUSBMode()
+			if err != nil {
+				continue
+			}
 			if !usbMode {
 				if err := mc.EnableUSBMode(); err != nil {
 					log.Println(err)
@@ -507,11 +527,11 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 	total := ""
 	for {
 		line, err := reader.ReadString('\n')
-		line = strings.TrimSpace(line)
-		total += line
 		if err != nil {
 			return "", err
 		}
+		line = strings.TrimSpace(line)
+		total += line
 		if line == "ERROR" {
 			failed = true
 			break
@@ -525,7 +545,7 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 		}
 	}
 	if failed {
-		return "", fmt.Errorf("AT command failed")
+		return "", fmt.Errorf("AT command '%s' failed", atCommand)
 	}
 	return "", nil
 }
@@ -600,21 +620,35 @@ func (mc *ModemController) IsInUSBMode() (bool, error) {
 }
 
 func (mc *ModemController) SetModemPower(on bool) error {
-	pin := gpioreg.ByName("GPIO22")
-	if pin == nil {
+	// TODO make GPIO22 and 20 configurable
+	pinEn := gpioreg.ByName("GPIO22")
+	if pinEn == nil {
 		return fmt.Errorf("failed to init GPIO22 pin")
 	}
+	pinPowerEn := gpioreg.ByName("GPIO20")
+	if pinPowerEn == nil {
+		return fmt.Errorf("failed to init GPIO20 pin")
+	}
 	if on {
-		if err := pin.Out(gpio.High); err != nil {
+		log.Println("Powering on USB modem")
+		if err := pinEn.Out(gpio.High); err != nil {
 			return fmt.Errorf("failed to set modem power pin high: %v", err)
 		}
+		if err := pinPowerEn.Out(gpio.High); err != nil {
+			return fmt.Errorf("failed to enable power for the modem: %v", err)
+		}
 	} else {
-		log.Println("powering off USB modem")
-		if err := pin.Out(gpio.Low); err != nil {
+		log.Println("Powering off USB modem")
+		if err := pinEn.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
 		_, _ = mc.RunATCommand("AT+CPOF")
 		//TODO Check that modem has powered off by checking if /dev/UsbModemAT exists
+
+		// TODO Wait until it has powered off safely to cut power.
+		if err := pinPowerEn.Out(gpio.Low); err != nil {
+			return fmt.Errorf("failed to enable power for the modem: %v", err)
+		}
 	}
 	if err := setUSBPower(on); err != nil {
 		return err
@@ -627,9 +661,9 @@ func setUSBPower(enabled bool) error {
 	// TODO When powering on USB hub, power off the ethernet port as that is not needed still.
 	var command string
 	if enabled {
-		command = "echo 1 | sudo tee /sys/devices/platform/soc/3f980000.usb/buspower"
+		command = "echo 1 | tee /sys/devices/platform/soc/3f980000.usb/buspower"
 	} else {
-		command = "echo 0 | sudo tee /sys/devices/platform/soc/3f980000.usb/buspower"
+		command = "echo 0 | tee /sys/devices/platform/soc/3f980000.usb/buspower"
 	}
 
 	cmd := exec.Command("bash", "-c", command)
@@ -675,38 +709,38 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 	if time.Now().Before(mc.stayOnUntil) {
-		return true, fmt.Sprintf("modem should be on because it was requested to stay on until %s", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
+		return true, fmt.Sprintf("Modem should be on because it was requested to stay on until %s.", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
 	}
 
 	if time.Since(mc.lastFailedFindModem) < mc.RetryFindModemInterval {
-		return false, fmt.Sprintf("shouldn't retry finding modem for %v", mc.RetryFindModemInterval)
+		return false, fmt.Sprintf("Shouldn't retry finding modem for %v.", mc.RetryFindModemInterval)
 	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
-		return false, fmt.Sprintf("modem shouldn't retry connection for %v", mc.RetryInterval)
+		return false, fmt.Sprintf("Modem shouldn't retry connection for %v.", mc.RetryInterval)
 	}
 
 	if time.Since(mc.StartTime) < mc.InitialOnDuration {
-		return true, fmt.Sprintf("modem should be on for initial %v", mc.InitialOnDuration)
+		return true, fmt.Sprintf("Modem should be on for initial %v.", mc.InitialOnDuration)
 	}
 
 	if time.Since(mc.lastOnRequestTime) < mc.RequestOnDuration {
-		return true, fmt.Sprintf("modem should be on because of it being requested in the last %v", mc.RequestOnDuration)
+		return true, fmt.Sprintf("Modem should be on because of it being requested in the last %v.", mc.RequestOnDuration)
 	}
 
 	if time.Since(mc.lastSuccessfulPing) > mc.MaxOffDuration {
-		return true, fmt.Sprintf("modem should be on because modem has been off for over %s", mc.MaxOffDuration)
+		return true, fmt.Sprintf("Modem should be on because modem has been off for over %s.", mc.MaxOffDuration)
 	}
 
 	if time.Since(mc.connectedTime) < mc.MinConnDuration {
-		return true, fmt.Sprintf("modem should be on because minimum connection duration is %v", mc.MinConnDuration)
+		return true, fmt.Sprintf("Modem should be on because minimum connection duration is %v.", mc.MinConnDuration)
 	}
 
 	if saltCommandsRunning() {
-		return true, fmt.Sprintln("modem should be on because salt commands are running")
+		return true, fmt.Sprintln("Modem should be on because salt commands are running.")
 	}
 
-	return false, "no reason the modem should be on"
+	return false, "No reason the modem should be on."
 }
 
 func saltCommandsRunning() bool {

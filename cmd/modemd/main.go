@@ -19,6 +19,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -59,9 +60,8 @@ func runMain() error {
 	if !args.Timestamps {
 		log.SetFlags(0) // Removes default timestamp flag
 	}
-	log.Printf("running version: %s", version)
+	log.Printf("Running version: %s", version)
 
-	log.Print("init gpio")
 	if _, err := host.Init(); err != nil {
 		return err
 	}
@@ -96,30 +96,29 @@ func runMain() error {
 		MaxOffDuration:         conf.MaxOffDuration,
 	}
 
-	log.Println("starting dbus service")
+	log.Println("Starting dbus service.")
 	if err := startService(&mc); err != nil {
 		return err
 	}
 
 	if !mc.ShouldBeOn() || args.RestartModem {
-		log.Println("powering off USB modem")
+		log.Println("Powering off USB modem.")
 		mc.SetModemPower(false)
 	}
 
 	for {
-		log.Println("waiting until modem should be powered on")
+		log.Println("Waiting until modem should be powered on.")
 		for !mc.ShouldBeOn() {
 			time.Sleep(5 * time.Second)
 		}
 
-		log.Println("powering on USB modem")
 		mc.SetModemPower(true)
 
-		log.Println("finding USB modem")
+		log.Println("Finding USB modem.")
 		retries := 3
 		for mc.ShouldBeOn() {
 			if mc.FindModem() {
-				log.Printf("found modem %s\n", mc.Modem.Name)
+				log.Printf("Found modem %s.\n", mc.Modem.Name)
 				usbMode, err := mc.IsInUSBMode()
 				if err != nil {
 					return err
@@ -133,30 +132,46 @@ func runMain() error {
 			}
 			retries--
 			if retries < 1 {
-				log.Println("failed to find USB modem, will check again later")
+				log.Println("Failed to find USB modem, will check again later.")
 				mc.lastFailedFindModem = time.Now()
 				mc.SetModemPower(false)
 				break
 			} else {
-				log.Printf("no USB modem found. Will cycle power %d more time(s) to find modem", retries)
+				log.Printf("No USB modem found. Will cycle power %d more time(s) to find modem", retries)
 			}
 			mc.CycleModemPower()
 		}
 
 		if mc.Modem != nil {
-			//TODO commands to setup modem connection.
-			//if err := mc.TurnOnModem(); err != nil {
-			//	return err
-			//}
-			//return nil
-			log.Println("waiting for modem to connect to a network")
+			log.Println("Waiting for AT command to respond.")
+			atCommandSuccess := false
+			for i := 0; i < 20; i++ {
+				_, err := mc.RunATCommand("AT")
+				if err == nil {
+					atCommandSuccess = true
+					break
+				}
+				time.Sleep(time.Second)
+			}
+			if atCommandSuccess {
+				log.Println("Got response from AT command.")
+			} else {
+				return fmt.Errorf("failed to get response from AT command")
+			}
+			time.Sleep(5 * time.Second) // Wait a little bit longer or else might get AT ERRORS
+
+			if err := mc.DisableGPS(); err != nil {
+				return err
+			}
+
+			log.Println("Waiting for modem to connect to a network.")
 			connected, err := mc.WaitForConnection()
 			if err != nil {
 				return err
 			}
 			connectionsFirstPing := true
 			if connected {
-				log.Println("modem has connected to a network")
+				log.Println("Modem has connected to a network.")
 				mc.connectedTime = time.Now()
 				for {
 					if mc.PingTest() {
@@ -175,13 +190,13 @@ func runMain() error {
 					}
 				}
 			} else {
-				log.Println("modem failed to connect to a network")
+				log.Println("Modem failed to connect to a network.")
 			}
 		}
 
 		mc.Modem = nil
 
-		log.Println("powering off USB modem")
+		log.Println("Powering off USB modem.")
 		mc.SetModemPower(false)
 	}
 }
