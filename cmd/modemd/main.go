@@ -102,17 +102,21 @@ func runMain() error {
 	}
 
 	if !mc.ShouldBeOn() || args.RestartModem {
-		log.Println("Powering off USB modem.")
-		mc.SetModemPower(false)
+		if err := mc.SetModemPower(false); err != nil {
+			return err
+		}
 	}
 
 	for {
-		log.Println("Waiting until modem should be powered on.")
-		for !mc.ShouldBeOn() {
-			time.Sleep(5 * time.Second)
+		if !mc.ShouldBeOn() {
+			log.Println("Waiting until modem should be powered on.")
+			for !mc.ShouldBeOn() {
+				time.Sleep(5 * time.Second)
+			}
 		}
-
-		mc.SetModemPower(true)
+		if err := mc.SetModemPower(true); err != nil {
+			return err
+		}
 
 		log.Println("Finding USB modem.")
 		retries := 3
@@ -134,7 +138,9 @@ func runMain() error {
 			if retries < 1 {
 				log.Println("Failed to find USB modem, will check again later.")
 				mc.lastFailedFindModem = time.Now()
-				mc.SetModemPower(false)
+				if err := mc.SetModemPower(false); err != nil {
+					return err
+				}
 				break
 			} else {
 				log.Printf("No USB modem found. Will cycle power %d more time(s) to find modem", retries)
@@ -164,7 +170,6 @@ func runMain() error {
 				return err
 			}
 
-			log.Println("Waiting for modem to connect to a network.")
 			connected, err := mc.WaitForConnection()
 			if err != nil {
 				return err
@@ -194,9 +199,10 @@ func runMain() error {
 			}
 		}
 
-		mc.Modem = nil
-
 		log.Println("Powering off USB modem.")
-		mc.SetModemPower(false)
+		if err := mc.SetModemPower(false); err != nil {
+			return err
+		}
+		mc.Modem = nil
 	}
 }

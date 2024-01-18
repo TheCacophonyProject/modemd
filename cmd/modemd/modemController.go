@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
 	goconfig "github.com/TheCacophonyProject/go-config"
 	"github.com/tarm/serial"
 	"periph.io/x/periph/conn/gpio"
@@ -638,16 +639,29 @@ func (mc *ModemController) SetModemPower(on bool) error {
 			return fmt.Errorf("failed to enable power for the modem: %v", err)
 		}
 	} else {
-		log.Println("Powering off USB modem")
+		log.Println("Triggering modem shutdown.")
 		if err := pinEn.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
 		_, _ = mc.RunATCommand("AT+CPOF")
-		//TODO Check that modem has powered off by checking if /dev/UsbModemAT exists
-
-		// TODO Wait until it has powered off safely to cut power.
+		log.Println("Waiting 30 seconds for modem to shutdown.")
+		time.Sleep(30 * time.Second)
+		if mc.Modem != nil {
+			out, err := exec.Command("lsusb").CombinedOutput()
+			if err != nil {
+				return fmt.Errorf("failed to check if modem is powered off: %v, output: %s", err, out)
+			}
+			if strings.Contains(string(out), mc.Modem.VendorProduct) {
+				eventclient.AddEvent(eventclient.Event{
+					Timestamp: time.Now().UTC(),
+					Type:      "failed-modem-shutdown",
+				})
+				log.Printf("Modem is not shutting down, cutting power to modem anyway: %s", out)
+			}
+		}
+		log.Println("Powering off modem.")
 		if err := pinPowerEn.Out(gpio.Low); err != nil {
-			return fmt.Errorf("failed to enable power for the modem: %v", err)
+			return fmt.Errorf("failed to disable power for the modem: %v", err)
 		}
 	}
 	if err := setUSBPower(on); err != nil {
@@ -665,7 +679,11 @@ func setUSBPower(enabled bool) error {
 	} else {
 		command = "echo 0 | tee /sys/devices/platform/soc/3f980000.usb/buspower"
 	}
-
+	if enabled {
+		log.Println("Enabling USB power")
+	} else {
+		log.Println("Disabling USB power")
+	}
 	cmd := exec.Command("bash", "-c", command)
 	err := cmd.Run()
 	if err != nil {
@@ -684,6 +702,7 @@ func (mc *ModemController) CycleModemPower() error {
 // WaitForConnection will return false if no connection is made before either
 // it timeouts or the modem should no longer be powered.
 func (mc *ModemController) WaitForConnection() (bool, error) {
+	log.Printf("Waiting %s for modem to connect", mc.ConnectionTimeout)
 	timeout := time.After(mc.ConnectionTimeout)
 	for {
 		select {
@@ -696,8 +715,13 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 				mc.lastFailedConnection = time.Now()
 				return false, err
 			}
-			if def && mc.PingTest() {
+			if !def {
+				continue
+			}
+			if mc.PingTest() {
 				return true, nil
+			} else {
+				log.Println("Ping test failed.")
 			}
 		}
 	}
