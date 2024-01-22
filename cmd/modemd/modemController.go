@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -768,6 +769,11 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 }
 
 func saltCommandsRunning() bool {
+	// Check if minion_id file is present
+	// If the file is not present then making the salt-call will make the minion_id file from the hostname, so just return false
+	if _, err := os.Stat("/etc/salt/minion_id"); err != nil {
+		return false
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
