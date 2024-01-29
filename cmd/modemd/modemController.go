@@ -673,22 +673,26 @@ func (mc *ModemController) SetModemPower(on bool) error {
 }
 
 func setUSBPower(enabled bool) error {
-	// TODO When powering on USB hub, power off the ethernet port as that is not needed still.
-	var command string
+	var commands []string
 	if enabled {
-		command = "echo 1 | tee /sys/devices/platform/soc/3f980000.usb/buspower"
+		commands = []string{
+			"echo 1 | tee /sys/devices/platform/soc/3f980000.usb/buspower",     // Enable USB hub
+			"echo 1 | sudo tee /sys/bus/usb/devices/1-1:1.0/1-1-port1/disable", // Disable Ethernet plug (thanks uhubctl)
+		}
 	} else {
-		command = "echo 0 | tee /sys/devices/platform/soc/3f980000.usb/buspower"
+		commands = []string{"echo 0 | tee /sys/devices/platform/soc/3f980000.usb/buspower"} // Disable USB hub
 	}
 	if enabled {
 		log.Println("Enabling USB power")
 	} else {
 		log.Println("Disabling USB power")
 	}
-	cmd := exec.Command("bash", "-c", command)
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to set USB power: %w", err)
+	for _, command := range commands {
+		cmd := exec.Command("bash", "-c", command)
+		err := cmd.Run()
+		if err != nil {
+			return fmt.Errorf("failed to set USB power: %w", err)
+		}
 	}
 	return nil
 }
