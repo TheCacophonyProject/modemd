@@ -691,9 +691,13 @@ func setUSBPower(enabled bool) error {
 		cmd := exec.Command("bash", "-c", command)
 		err := cmd.Run()
 		if err != nil {
-			return fmt.Errorf("failed to set USB power: %w", err)
+			enDis := "disable"
+			if enabled {
+				enDis = "enable"
+			}
+			return fmt.Errorf("failed to %s USB power: %w, command: %s", enDis, err, command)
 		}
-		time.Sleep(100 * time.Millisecond) // Need to wait or or else disabling ethernet might not work.
+		time.Sleep(500 * time.Millisecond) // Need to wait or or else disabling ethernet might not work.
 	}
 	return nil
 }
