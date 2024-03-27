@@ -677,7 +677,7 @@ func setUSBPower(enabled bool) error {
 	if enabled {
 		commands = []string{
 			"echo 1 | tee /sys/devices/platform/soc/3f980000.usb/buspower", // Enable USB hub
-			"echo 1 | tee /sys/bus/usb/devices/1-1:1.0/1-1-port1/disable",  // Disable Ethernet plug (thanks uhubctl)
+			//"echo 1 | tee /sys/bus/usb/devices/1-1:1.0/1-1-port1/disable",  // Disable Ethernet plug (thanks uhubctl)
 		}
 	} else {
 		commands = []string{"echo 0 | tee /sys/devices/platform/soc/3f980000.usb/buspower"} // Disable USB hub
@@ -697,7 +697,11 @@ func setUSBPower(enabled bool) error {
 			}
 			return fmt.Errorf("failed to %s USB power: %w, command: %s", enDis, err, command)
 		}
+		//time.Sleep(500 * time.Millisecond) // Need to wait or or else disabling ethernet might not work.
+	}
+	if enabled {
 		time.Sleep(500 * time.Millisecond) // Need to wait or or else disabling ethernet might not work.
+		exec.Command("bash", "-c", "echo 1 | tee /sys/bus/usb/devices/1-1:1.0/1-1-port1/disable")
 	}
 	return nil
 }
