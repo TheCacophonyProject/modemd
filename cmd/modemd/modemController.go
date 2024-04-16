@@ -672,36 +672,54 @@ func (mc *ModemController) SetModemPower(on bool) error {
 	return nil
 }
 
-func setUSBPower(enabled bool) error {
-	var commands []string
-	if enabled {
-		commands = []string{
-			"echo 1 | tee /sys/devices/platform/soc/3f980000.usb/buspower", // Enable USB hub
-			//"echo 1 | tee /sys/bus/usb/devices/1-1:1.0/1-1-port1/disable",  // Disable Ethernet plug (thanks uhubctl)
-		}
-	} else {
-		commands = []string{"echo 0 | tee /sys/devices/platform/soc/3f980000.usb/buspower"} // Disable USB hub
-	}
-	if enabled {
+func setUSBPower(enable bool) error {
+	var writeVal []byte
+	if enable {
 		log.Println("Enabling USB power")
+		writeVal = []byte("1")
 	} else {
 		log.Println("Disabling USB power")
+		writeVal = []byte("0")
 	}
-	for _, command := range commands {
-		cmd := exec.Command("bash", "-c", command)
-		err := cmd.Run()
-		if err != nil {
-			enDis := "disable"
-			if enabled {
-				enDis = "enable"
-			}
-			return fmt.Errorf("failed to %s USB power: %w, command: %s", enDis, err, command)
+
+	err := os.WriteFile("/sys/devices/platform/soc/3f980000.usb/buspower", writeVal, 0644)
+	if err != nil {
+		enDis := "disable"
+		if enable {
+			enDis = "enable"
 		}
-		//time.Sleep(500 * time.Millisecond) // Need to wait or or else disabling ethernet might not work.
+		return fmt.Errorf("failed to %s USB power: %s", enDis, err)
 	}
-	if enabled {
-		time.Sleep(500 * time.Millisecond) // Need to wait or or else disabling ethernet might not work.
-		exec.Command("bash", "-c", "echo 1 | tee /sys/bus/usb/devices/1-1:1.0/1-1-port1/disable")
+
+	if enable {
+		// Function to disable ethernet port. It will get enabled when the USB hub is turned on.
+		// Turning it off will saves a bit of power.
+		go func() {
+			startTime := time.Now()
+			// Wait for ethernet to be enabled.
+			for {
+				out, err := exec.Command("lsusb").CombinedOutput()
+				if err != nil {
+					log.Println("Failed to check if ethernet is enabled", err)
+					return
+				}
+				if strings.Contains(string(out), "ID 0424:ec00") {
+					log.Println("Ethernet is enabled")
+					break
+				}
+				if time.Since(startTime) > 10*time.Second {
+					return
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			// Disable ethernet port.
+			err = os.WriteFile("/sys/bus/usb/devices/1-1:1.0/1-1-port1/disable", []byte("1"), 0644) // (thanks uhubctl)
+			if err != nil {
+				log.Println("Failed to disable ethernet port", err)
+			}
+			log.Println("Disabled ethernet port")
+		}()
 	}
 	return nil
 }
