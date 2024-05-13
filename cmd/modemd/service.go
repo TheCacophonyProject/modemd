@@ -100,6 +100,16 @@ func (s service) GetStatus() (map[string]interface{}, *dbus.Error) {
 	return status, nil
 }
 
+func (s service) SetAPN(apn string) *dbus.Error {
+	log.Println("Setting APN to", apn)
+	err := s.mc.setAPN(apn)
+	if err != nil {
+		log.Println(err)
+		return makeDbusError("SetAPN", err)
+	}
+	return nil
+}
+
 /*
 func (s service) GPSOn() *dbus.Error {
 	err := s.mc.EnableGPS()
