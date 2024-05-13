@@ -258,6 +258,7 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		modem["manufacturer"] = valueOrErrorStr(mc.getManufacturer())
 		modem["model"] = valueOrErrorStr(mc.getModel())
 		modem["serial"] = valueOrErrorStr(mc.getSerialNumber())
+		modem["apn"] = valueOrErrorStr(mc.getAPN())
 		status["modem"] = modem
 
 		signal := make(map[string]interface{})
@@ -418,6 +419,38 @@ func (mc *ModemController) getSerialNumber() (string, error) {
 // GPS only mode?
 // 9.1 Overview of AT Commands for SMS Control
 // Firmware upgrades?
+
+func (mc *ModemController) getAPN() (string, error) {
+	out, err := mc.RunATCommand("AT+CGDCONT?")
+	if err != nil {
+		return "", err
+	}
+	out = strings.TrimPrefix(out, "+CGDCONT:")
+	out = strings.TrimSpace(out)
+	parts := strings.Split(out, ",")
+	if len(parts) < 3 {
+		return "", fmt.Errorf("invalid CGDCONT format %s", out)
+	}
+	apn := parts[2]
+	apn = strings.TrimPrefix(apn, "\"")
+	apn = strings.TrimSuffix(apn, "\"")
+	return apn, nil
+}
+
+func (mc *ModemController) setAPN(apn string) error {
+	_, err := mc.RunATCommand(fmt.Sprintf("AT+CGDCONT=1,\"IP\",\"%s\"", apn))
+	if err != nil {
+		return err
+	}
+	readAPN, err := mc.getAPN()
+	if err != nil {
+		return err
+	}
+	if readAPN != apn {
+		return fmt.Errorf("failed to set APN, APN is '%s' when it was set as '%s'", readAPN, apn)
+	}
+	return err
+}
 
 func (mc *ModemController) CheckSimCard() (string, error) {
 	// Enable verbose error messages.
