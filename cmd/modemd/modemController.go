@@ -62,6 +62,7 @@ type ModemController struct {
 	lastFailedFindModem  time.Time
 	connectedTime        time.Time
 	stayOnUntil          time.Time
+	stayOffUntil         time.Time
 	onOffReason          string
 	IsPowered            bool
 
@@ -74,7 +75,14 @@ func (mc *ModemController) NewOnRequest() {
 
 func (mc *ModemController) StayOnUntil(onUntil time.Time) error {
 	mc.stayOnUntil = onUntil
+	mc.stayOffUntil = time.Time{}
 	log.Println("dbus request to keep modem on until", onUntil.Format(time.DateTime))
+	return nil
+}
+
+func (mc *ModemController) StayOffUntil(offUntil time.Time) error {
+	mc.stayOffUntil = offUntil
+	mc.stayOnUntil = time.Time{}
 	return nil
 }
 
@@ -537,24 +545,29 @@ func (mc *ModemController) readBand() (string, error) {
 }
 
 func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
+	_, out, err := mc.RunATCommandTotalOutput(atCommand)
+	return out, err
+}
+
+func (mc *ModemController) RunATCommandTotalOutput(atCommand string) (string, string, error) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
 	s, err := serial.OpenPort(c)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer s.Close()
 	s.Flush()
 	_, err = s.Write([]byte("ATE0\r"))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	time.Sleep(time.Millisecond * 10)
 	s.Flush()
 	_, err = s.Write([]byte(atCommand + "\r"))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	reader := bufio.NewReader(s)
@@ -563,7 +576,7 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			return "", err
+			return total, "", err
 		}
 		line = strings.TrimSpace(line)
 		total += line
@@ -575,14 +588,13 @@ func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
 			break
 		}
 		if len(line) > 0 {
-			//log.Println(line)
-			return line, nil
+			return total, line, nil
 		}
 	}
 	if failed {
-		return "", fmt.Errorf("AT command '%s' failed", atCommand)
+		return total, "", fmt.Errorf("AT command '%s' failed", atCommand)
 	}
-	return "", nil
+	return total, "", nil
 }
 
 func (mc *ModemController) RunATCommandOld(cmd string, errorOnNoOK bool) (string, error) {
@@ -797,6 +809,10 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
+	if time.Now().Before(mc.stayOffUntil) {
+		return false, fmt.Sprintf("Modem should be off because it was requested to stay off until %s.", mc.stayOffUntil.Format("2006-01-02 15:04:05"))
+	}
+
 	if time.Now().Before(mc.stayOnUntil) {
 		return true, fmt.Sprintf("Modem should be on because it was requested to stay on until %s.", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
 	}
