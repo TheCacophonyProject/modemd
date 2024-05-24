@@ -31,7 +31,7 @@ builds:
   ldflags: -s -w -X main.version={{.Version}}
   binary: reception-logger
 
-- id: check-gps
+- id: modem-cli
   goos:
   - linux
   goarch:
@@ -39,9 +39,9 @@ builds:
   - arm64
   goarm:
   - "7"
-  main: ./cmd/check-gps
+  main: ./cmd/modem-cli
   ldflags: -s -w -X main.version={{.Version}}
-  binary: check-gps
+  binary: modem-cli
 
 
 nfpms:

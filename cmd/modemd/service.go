@@ -91,6 +91,14 @@ func (s service) StayOnFor(minutes int) *dbus.Error {
 	return nil
 }
 
+func (s service) StayOffFor(minutes int) *dbus.Error {
+	err := s.mc.StayOffUntil(time.Now().Add(time.Duration(minutes) * time.Minute))
+	if err != nil {
+		return makeDbusError("StayOffFor", err)
+	}
+	return nil
+}
+
 func (s service) GetStatus() (map[string]interface{}, *dbus.Error) {
 	status, err := s.mc.GetStatus()
 	if err != nil {
@@ -108,6 +116,15 @@ func (s service) SetAPN(apn string) *dbus.Error {
 		return makeDbusError("SetAPN", err)
 	}
 	return nil
+}
+
+func (s service) RunATCommand(atCommand string) (string, string, *dbus.Error) {
+	totalOut, out, err := s.mc.RunATCommandTotalOutput(atCommand)
+	if err != nil {
+		log.Println(err)
+		return "", "", makeDbusError("RunATCommand", err)
+	}
+	return totalOut, out, nil
 }
 
 /*
