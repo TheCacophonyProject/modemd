@@ -59,12 +59,15 @@ type ModemController struct {
 	lastOnRequestTime    time.Time
 	lastSuccessfulPing   time.Time
 	lastFailedConnection time.Time
-	lastFailedFindModem  time.Time
-	connectedTime        time.Time
-	stayOnUntil          time.Time
-	stayOffUntil         time.Time
-	onOffReason          string
-	IsPowered            bool
+	//lastFailedFindModem  time.Time
+	connectedTime time.Time
+	stayOnUntil   time.Time
+	stayOffUntil  time.Time
+	onOffReason   string
+	IsPowered     bool
+
+	failedToFindModem   bool
+	failedToFindSimCard bool
 
 	mu sync.Mutex
 }
@@ -809,16 +812,20 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
+	if mc.failedToFindModem {
+		return false, "Modem should be off because it could not be found on boot."
+	}
+
+	if mc.failedToFindSimCard {
+		return false, "Modem should be off because it failed to find a SIM card."
+	}
+
 	if time.Now().Before(mc.stayOffUntil) {
 		return false, fmt.Sprintf("Modem should be off because it was requested to stay off until %s.", mc.stayOffUntil.Format("2006-01-02 15:04:05"))
 	}
 
 	if time.Now().Before(mc.stayOnUntil) {
 		return true, fmt.Sprintf("Modem should be on because it was requested to stay on until %s.", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
-	}
-
-	if time.Since(mc.lastFailedFindModem) < mc.RetryFindModemInterval {
-		return false, fmt.Sprintf("Shouldn't retry finding modem for %v.", mc.RetryFindModemInterval)
 	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {

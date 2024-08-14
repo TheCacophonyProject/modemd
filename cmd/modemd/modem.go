@@ -68,6 +68,7 @@ func (m *Modem) IsDefaultRoute() (bool, error) {
 	return false, nil
 }
 
+/*
 func (m *Modem) WaitForConnection(timeout int) (bool, error) {
 	start := time.Now()
 	for {
@@ -84,3 +85,4 @@ func (m *Modem) WaitForConnection(timeout int) (bool, error) {
 		time.Sleep(time.Second)
 	}
 }
+*/

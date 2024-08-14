@@ -19,10 +19,12 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
-	"fmt"
+	"errors"
 	"log"
+	"strconv"
 	"time"
 
+	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
 	"github.com/TheCacophonyProject/go-config"
 	arg "github.com/alexflint/go-arg"
 	"periph.io/x/periph/host"
@@ -108,6 +110,7 @@ func runMain() error {
 	}
 
 	for {
+		// =========== Wait until modem should be on ===========
 		if !mc.ShouldBeOn() {
 			log.Println("Waiting until modem should be powered on.")
 			for !mc.ShouldBeOn() {
@@ -118,9 +121,9 @@ func runMain() error {
 			return err
 		}
 
+		// =========== Finding modem ===========
 		log.Println("Finding USB modem.")
-		retries := 3
-		for mc.ShouldBeOn() {
+		for retries := 3; retries > 0; retries-- {
 			if mc.FindModem() {
 				log.Printf("Found modem %s.\n", mc.Modem.Name)
 				usbMode, err := mc.IsInUSBMode()
@@ -133,69 +136,115 @@ func runMain() error {
 					}
 				}
 				break
-			}
-			retries--
-			if retries < 1 {
-				log.Println("Failed to find USB modem, will check again later.")
-				mc.lastFailedFindModem = time.Now()
-				if err := mc.SetModemPower(false); err != nil {
-					return err
-				}
-				break
 			} else {
 				log.Printf("No USB modem found. Will cycle power %d more time(s) to find modem", retries)
 			}
-			mc.CycleModemPower()
+		}
+		if mc.Modem == nil {
+			log.Println("Failed to find modem.")
+			log.Println("Making noModemFound event.")
+			eventclient.AddEvent(eventclient.Event{
+				Timestamp: time.Now(),
+				Type:      "noModemFound",
+			})
+			mc.failedToFindModem = true
+			continue
 		}
 
-		if mc.Modem != nil {
-			log.Println("Waiting for AT command to respond.")
-			atCommandSuccess := false
-			for i := 0; i < 20; i++ {
-				_, err := mc.RunATCommand("AT")
-				if err == nil {
-					atCommandSuccess = true
-					break
-				}
-				time.Sleep(time.Second)
+		// ========== Checking for AT response from modem. =============
+		log.Println("Waiting for AT command to respond.")
+		atCommandSuccess := false
+		for i := 0; i < 20; i++ {
+			_, err := mc.RunATCommand("AT")
+			if err == nil {
+				atCommandSuccess = true
+				break
 			}
-			if atCommandSuccess {
-				log.Println("Got response from AT command.")
-			} else {
-				return fmt.Errorf("failed to get response from AT command")
-			}
-			time.Sleep(5 * time.Second) // Wait a little bit longer or else might get AT ERRORS
+			time.Sleep(3 * time.Second)
+		}
+		if atCommandSuccess {
+			log.Println("AT command responding.")
+		} else {
+			log.Println("Making noModemATCommandResponse event.")
+			eventclient.AddEvent(eventclient.Event{
+				Timestamp: time.Now(),
+				Type:      "noModemATCommandResponse",
+			})
+			return errors.New("failed to get AT command response")
+		}
+		time.Sleep(5 * time.Second) // Wait a little bit longer or else might get AT ERRORS
+		if err := mc.DisableGPS(); err != nil {
+			return err
+		}
 
-			if err := mc.DisableGPS(); err != nil {
-				return err
+		// ========== Checking SIM card. =============
+		log.Println("Checking SIM card.")
+		simReady := false
+		for retries := 5; retries > 0; retries-- {
+			simStatus, err := mc.CheckSimCard()
+			if err == nil && simStatus == "READY" {
+				simReady = true
+				break
 			}
+			log.Printf("SIM card not ready. Will cycle power %d more time(s) to find SIM card", retries)
+			time.Sleep(5 * time.Second)
+		}
+		if !simReady {
+			mc.failedToFindSimCard = true
+			makeModemEvent("noModemSimCard", &mc)
+			continue
+		}
 
-			connected, err := mc.WaitForConnection()
-			if err != nil {
-				return err
+		// ========== Checking signal strength. =============
+		log.Println("Checking signal strength.")
+		// TODO make configurable to how long it will try to find a connection
+		gotSignal := false
+		for i := 0; i < 5; i++ {
+			strengthStr, _ := mc.signalStrength()
+			strength, err := strconv.Atoi(strengthStr)
+			if err == nil && strength != 99 {
+				log.Printf("Signal strength: %s", strengthStr)
+				gotSignal = true
+				break
 			}
-			connectionsFirstPing := true
-			if connected {
-				log.Println("Modem has connected to a network.")
-				mc.connectedTime = time.Now()
-				for {
-					if mc.PingTest() {
-						mc.lastSuccessfulPing = time.Now()
-						if connectionsFirstPing {
-							connectionsFirstPing = false
-							sendModemConnectedSignal() // This allows programs to trigger events when the modem connects.
-						}
-					} else {
-						log.Println("ping test failed")
-						mc.lastFailedConnection = time.Now()
-						break
-					}
-					if !mc.WaitForNextPingTest() {
-						break
-					}
+			time.Sleep(3 * time.Second)
+		}
+		if !gotSignal {
+			mc.lastFailedConnection = time.Now()
+			makeModemEvent("noModemSignal", &mc)
+			continue
+		}
+
+		// ========== Wait for connection to internet =============
+		connected, err := mc.WaitForConnection()
+		if err != nil {
+			return err
+		}
+		if !connected {
+			mc.lastFailedConnection = time.Now()
+			makeModemEvent("modemPingFail", &mc)
+			continue
+		}
+
+		connectionsFirstPing := true
+
+		log.Println("Modem has connected to a network.")
+		makeModemEvent("modemConnectedToNetwork", &mc)
+		mc.connectedTime = time.Now()
+		for {
+			if mc.PingTest() {
+				mc.lastSuccessfulPing = time.Now()
+				if connectionsFirstPing {
+					connectionsFirstPing = false
+					sendModemConnectedSignal() // This allows programs to trigger events when the modem connects.
 				}
 			} else {
-				log.Println("Modem failed to connect to a network.")
+				log.Println("ping test failed")
+				mc.lastFailedConnection = time.Now()
+				break
+			}
+			if !mc.WaitForNextPingTest() {
+				break
 			}
 		}
 
@@ -205,4 +254,51 @@ func runMain() error {
 		}
 		mc.Modem = nil
 	}
+}
+
+func makeModemEvent(eventType string, mc *ModemController) {
+	log.Printf("Making modem event '%s'.", eventType)
+	signalStrength, err := mc.signalStrength()
+	if err != nil {
+		log.Printf("Failed to get signal strength: %s", err)
+	}
+	band, err := mc.readBand()
+	if err != nil {
+		log.Printf("Failed to get band: %s", err)
+	}
+	simStatus, err := mc.CheckSimCard()
+	if err != nil {
+		log.Printf("Failed to get sim status: %s", err)
+	}
+	apn, err := mc.getAPN()
+	if err != nil {
+		log.Printf("Failed to get apn: %s", err)
+	}
+	simProvider, err := mc.readSimProvider()
+	if err != nil {
+		log.Printf("Failed to get sim provider: %s", err)
+	}
+	provider, accessTechnology, err := mc.readProvider()
+	if err != nil {
+		log.Printf("Failed to get provider: %s", err)
+	}
+	iccid, err := mc.readSimICCID()
+	if err != nil {
+		log.Printf("Failed to get iccid: %s", err)
+	}
+
+	eventclient.AddEvent(eventclient.Event{
+		Timestamp: time.Now(),
+		Type:      eventType,
+		Details: map[string]interface{}{
+			"signalStrength":   signalStrength,
+			"band":             band,
+			"simStatus":        simStatus,
+			"apn":              apn,
+			"provider":         provider,
+			"accessTechnology": accessTechnology,
+			"simProvider":      simProvider,
+			"iccid":            iccid,
+		},
+	})
 }
