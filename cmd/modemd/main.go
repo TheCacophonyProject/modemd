@@ -153,18 +153,16 @@ func runMain() error {
 
 		// ========== Checking for AT response from modem. =============
 		log.Println("Waiting for AT command to respond.")
-		atCommandSuccess := false
 		for i := 0; i < 20; i++ {
 			_, err := mc.RunATCommand("AT")
 			if err == nil {
-				atCommandSuccess = true
+				mc.ATReady = true
+				log.Println("AT command responding.")
 				break
 			}
 			time.Sleep(3 * time.Second)
 		}
-		if atCommandSuccess {
-			log.Println("AT command responding.")
-		} else {
+		if !mc.ATReady {
 			log.Println("Making noModemATCommandResponse event.")
 			eventclient.AddEvent(eventclient.Event{
 				Timestamp: time.Now(),
@@ -173,6 +171,7 @@ func runMain() error {
 			return errors.New("failed to get AT command response")
 		}
 		time.Sleep(5 * time.Second) // Wait a little bit longer or else might get AT ERRORS
+		mc.ATReady = true
 		if err := mc.DisableGPS(); err != nil {
 			return err
 		}

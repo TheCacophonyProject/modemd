@@ -55,6 +55,7 @@ type ModemController struct {
 	RetryFindModemInterval time.Duration
 	MaxOffDuration         time.Duration
 	MinConnDuration        time.Duration
+	ATReady                bool
 
 	lastOnRequestTime    time.Time
 	lastSuccessfulPing   time.Time
@@ -257,6 +258,7 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 	status["timestamp"] = time.Now().Format(time.RFC1123Z)
 	status["powered"] = mc.IsPowered
 	status["onOffReason"] = mc.onOffReason
+	status["ATReady"] = mc.ATReady
 
 	if mc.Modem != nil {
 		modem := make(map[string]interface{})
@@ -264,32 +266,36 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		modem["netdev"] = mc.Modem.Netdev
 		modem["vendor"] = mc.Modem.VendorProduct
 		modem["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
-		modem["voltage"] = valueOrErrorStr(mc.readVoltage())
-		modem["temp"] = valueOrErrorStr(mc.readTemp())
-		modem["manufacturer"] = valueOrErrorStr(mc.getManufacturer())
-		modem["model"] = valueOrErrorStr(mc.getModel())
-		modem["serial"] = valueOrErrorStr(mc.getSerialNumber())
-		modem["apn"] = valueOrErrorStr(mc.getAPN())
+		if mc.ATReady {
+			modem["voltage"] = valueOrErrorStr(mc.readVoltage())
+			modem["temp"] = valueOrErrorStr(mc.readTemp())
+			modem["manufacturer"] = valueOrErrorStr(mc.getManufacturer())
+			modem["model"] = valueOrErrorStr(mc.getModel())
+			modem["serial"] = valueOrErrorStr(mc.getSerialNumber())
+			modem["apn"] = valueOrErrorStr(mc.getAPN())
+		}
 		status["modem"] = modem
 
-		signal := make(map[string]interface{})
-		signal["strength"] = valueOrErrorStr(mc.signalStrength())
-		signal["band"] = valueOrErrorStr(mc.readBand())
-		provider, accessTechnology, err := mc.readProvider()
-		if err != nil {
-			signal["provider"] = err.Error()
-			signal["accessTechnology"] = err.Error()
-		} else {
-			signal["provider"] = provider
-			signal["accessTechnology"] = accessTechnology
-		}
-		status["signal"] = signal
+		if mc.ATReady {
+			signal := make(map[string]interface{})
+			signal["strength"] = valueOrErrorStr(mc.signalStrength())
+			signal["band"] = valueOrErrorStr(mc.readBand())
+			provider, accessTechnology, err := mc.readProvider()
+			if err != nil {
+				signal["provider"] = err.Error()
+				signal["accessTechnology"] = err.Error()
+			} else {
+				signal["provider"] = provider
+				signal["accessTechnology"] = accessTechnology
+			}
+			status["signal"] = signal
 
-		simCard := make(map[string]interface{})
-		simCard["simCardStatus"] = valueOrErrorStr(mc.CheckSimCard())
-		simCard["ICCID"] = valueOrErrorStr(mc.readSimICCID())
-		simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
-		status["simCard"] = simCard
+			simCard := make(map[string]interface{})
+			simCard["simCardStatus"] = valueOrErrorStr(mc.CheckSimCard())
+			simCard["ICCID"] = valueOrErrorStr(mc.readSimICCID())
+			simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
+			status["simCard"] = simCard
+		}
 
 		/*
 			if gpsEnabled, err := mc.gpsEnabled(); err != nil {
@@ -320,12 +326,18 @@ func (mc *ModemController) readVoltage() (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	originalOutput := out
+
 	// will be of format "+CBC: 3.305V"
 	out = strings.TrimSpace(out)
 	out = strings.TrimPrefix(out, "+CBC:")
 	out = strings.TrimSuffix(out, "V")
 	out = strings.TrimSpace(out)
-	return strconv.ParseFloat(out, 64)
+	voltage, err := strconv.ParseFloat(out, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse voltage from output '%s': %v", originalOutput, err)
+	}
+	return voltage, nil
 }
 
 func (mc *ModemController) readProvider() (string, string, error) {
@@ -334,15 +346,16 @@ func (mc *ModemController) readProvider() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	originalOutput := out
 	out = strings.TrimPrefix(out, "+COPS:")
 	out = strings.TrimSpace(out)
 	items := strings.Split(out, ",")
 	if len(items) < 4 {
-		return "", "", fmt.Errorf("invalid COPS format %s", out)
+		return "", "", fmt.Errorf("invalid COPS format '%s'", originalOutput)
 	}
 	accessTechnologyCode, err := strconv.Atoi(items[3])
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("invalid COPS format '%s' err: '%v'", originalOutput, err)
 	}
 	accessTechnology := "Unknown"
 	switch accessTechnologyCode {
@@ -375,9 +388,14 @@ func (mc *ModemController) readTemp() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	originalOutput := out
 	out = strings.TrimPrefix(out, "+CPMUTEMP:")
 	out = strings.TrimSpace(out)
-	return strconv.Atoi(out)
+	temp, err := strconv.Atoi(out)
+	if err != nil {
+		return 0, fmt.Errorf("invalid CPMUTEMP format '%s'", originalOutput)
+	}
+	return temp, nil
 }
 
 func (mc *ModemController) readSimProvider() (string, error) {
@@ -385,11 +403,12 @@ func (mc *ModemController) readSimProvider() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out = strings.TrimPrefix(out, "+CSPN:")
-	out = strings.TrimSpace(out)
-	parts := strings.Split(out, ",")
+	parseOut := strings.TrimSpace(out)
+	parseOut = strings.TrimPrefix(parseOut, "+CSPN:")
+	parseOut = strings.TrimSpace(parseOut)
+	parts := strings.Split(parseOut, ",")
 	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid CSPN format %s", out)
+		return "", fmt.Errorf("invalid CSPN format '%s'", out)
 	}
 	return strings.Trim(parts[0], "\""), nil
 }
@@ -548,6 +567,9 @@ func (mc *ModemController) readBand() (string, error) {
 }
 
 func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
+	if !mc.IsPowered {
+		return "", fmt.Errorf("modem is not powered")
+	}
 	_, out, err := mc.RunATCommandTotalOutput(atCommand)
 	return out, err
 }
@@ -595,7 +617,7 @@ func (mc *ModemController) RunATCommandTotalOutput(atCommand string) (string, st
 		}
 	}
 	if failed {
-		return total, "", fmt.Errorf("AT command '%s' failed", atCommand)
+		return total, "", fmt.Errorf("AT command '%s' failed, output: '%s'", atCommand, total)
 	}
 	return total, "", nil
 }
@@ -688,11 +710,12 @@ func (mc *ModemController) SetModemPower(on bool) error {
 			return fmt.Errorf("failed to enable power for the modem: %v", err)
 		}
 	} else {
+		_, _ = mc.RunATCommand("AT+CPOF")
+		mc.ATReady = false
 		log.Println("Triggering modem shutdown.")
 		if err := pinEn.Out(gpio.Low); err != nil {
 			return fmt.Errorf("failed to set modem power pin low: %v", err)
 		}
-		_, _ = mc.RunATCommand("AT+CPOF")
 		log.Println("Waiting 30 seconds for modem to shutdown.")
 		time.Sleep(30 * time.Second)
 		if mc.Modem != nil {
