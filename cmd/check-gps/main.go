@@ -3,14 +3,16 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/TheCacophonyProject/go-utils/logging"
 	"github.com/tarm/serial"
 )
+
+var log = logging.NewLogger("info")
 
 type gpsData struct {
 	latitude    float64
@@ -22,7 +24,6 @@ type gpsData struct {
 }
 
 func main() {
-	log.SetFlags(0)
 
 	log.Println("Checking if GPS is enabled")
 	out, err := runATCommand("AT+CGPS?")

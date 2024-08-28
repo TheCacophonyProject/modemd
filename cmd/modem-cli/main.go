@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"sort"
 	"time"
 
 	"github.com/TheCacophonyProject/go-config"
+	"github.com/TheCacophonyProject/go-utils/logging"
 	modemcontroller "github.com/TheCacophonyProject/modemd/modem-controller"
 	"github.com/alexflint/go-arg"
 )
@@ -19,6 +19,7 @@ type Args struct {
 	// TODO:
 	// GPS: on, off, restart, log
 	// Reception: log
+	logging.LogArgs
 }
 
 type atSubcommand struct {
@@ -51,6 +52,7 @@ func procArgs() Args {
 }
 
 var version = "<not set>"
+var log = logging.NewLogger("info")
 
 func main() {
 	err := runMain()
@@ -61,6 +63,8 @@ func main() {
 
 func runMain() error {
 	args := procArgs()
+
+	log = logging.NewLogger(args.LogLevel)
 
 	log.Printf("Running version: %s", version)
 

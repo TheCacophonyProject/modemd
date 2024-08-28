@@ -3,16 +3,17 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/TheCacophonyProject/go-utils/logging"
 	"github.com/tarm/serial"
 )
 
+var log = logging.NewLogger("info")
+
 func main() {
-	log.SetFlags(0)
 	for {
 		out, err := runATCommand("AT")
 		if err != nil {
