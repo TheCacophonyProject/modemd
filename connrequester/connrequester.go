@@ -6,13 +6,15 @@ package connrequester
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/TheCacophonyProject/go-utils/logging"
 	"github.com/godbus/dbus"
 )
+
+var log = logging.NewLogger("info")
 
 const (
 	dbusPath      = "/org/cacophony/modemd"

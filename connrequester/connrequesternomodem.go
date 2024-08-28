@@ -3,9 +3,12 @@
 package connrequester
 
 import (
-	"log"
 	"time"
+
+	"github.com/TheCacophonyProject/go-utils/logging"
 )
+
+var log = logging.NewLogger("info")
 
 type ConnectionRequester struct {
 }

@@ -20,12 +20,12 @@ package main
 
 import (
 	"errors"
-	"log"
 	"strconv"
 	"time"
 
 	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
 	"github.com/TheCacophonyProject/go-config"
+	"github.com/TheCacophonyProject/go-utils/logging"
 	arg "github.com/alexflint/go-arg"
 	"periph.io/x/periph/host"
 )
@@ -41,6 +41,7 @@ type Args struct {
 	ConfigDir    string `arg:"-c,--config" help:"path to configuration directory"`
 	Timestamps   bool   `arg:"-t,--timestamps" help:"include timestamps in log output"`
 	RestartModem bool   `arg:"-r,--restart" help:"cycle the power to the USB port"`
+	logging.LogArgs
 }
 
 func (Args) Version() string {
@@ -56,12 +57,13 @@ func procArgs() Args {
 }
 
 var version = "<not set>"
+var log = logging.NewLogger("info")
 
 func runMain() error {
 	args := procArgs()
-	if !args.Timestamps {
-		log.SetFlags(0) // Removes default timestamp flag
-	}
+
+	log = logging.NewLogger(args.LogLevel)
+
 	log.Printf("Running version: %s", version)
 
 	if _, err := host.Init(); err != nil {
