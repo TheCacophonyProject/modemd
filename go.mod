@@ -5,7 +5,7 @@ go 1.22.3
 require (
 	github.com/TheCacophonyProject/event-reporter/v3 v3.8.0
 	github.com/TheCacophonyProject/go-config v1.9.1
-	github.com/TheCacophonyProject/go-utils v0.1.1
+	github.com/TheCacophonyProject/go-utils v0.1.3
 	github.com/alexflint/go-arg v1.4.2
 	github.com/godbus/dbus v4.1.0+incompatible
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07

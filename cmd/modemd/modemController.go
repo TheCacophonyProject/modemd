@@ -32,6 +32,7 @@ import (
 
 	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
 	goconfig "github.com/TheCacophonyProject/go-config"
+	"github.com/TheCacophonyProject/go-utils/saltutil"
 	"github.com/tarm/serial"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
@@ -886,6 +887,9 @@ func saltCommandsRunning() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	if !saltutil.IsSaltIdSet() {
+		return false
+	}
 	cmd := exec.CommandContext(ctx, "salt-call", "--local", "saltutil.running")
 
 	stdout, err := cmd.Output()
