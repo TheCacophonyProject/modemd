@@ -15,14 +15,14 @@ var log = logging.NewLogger("info")
 
 func main() {
 	for {
-		out, err := runATCommand("AT")
+		_, err := runATCommand("AT")
 		if err != nil {
 			log.Fatal(err)
 		}
 		reception := readReception()
 		band, _ := readBand()
 		t := time.Now().Format("2006-01-02 15:04:05")
-		out = fmt.Sprintf("%s, %s, %s", t, reception, band)
+		out := fmt.Sprintf("%s, %s, %s", t, reception, band)
 		log.Println(out)
 		appendToFile("/home/pi/reception", out)
 		time.Sleep(5 * time.Second)

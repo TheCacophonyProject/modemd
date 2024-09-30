@@ -1,6 +1,7 @@
 [Unit]
 Description=Cacophony Project USB modem controller
 After=multi-user.target
+ConditionPathExists=/etc/salt/minion_id
 
 [Service]
 Type=simple
