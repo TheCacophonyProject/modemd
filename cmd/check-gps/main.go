@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -211,7 +210,7 @@ func runATCommand(atCommand string) (string, error) {
 // ConvertLong converts a longitude in format dddmm.mmmmmm to degrees.
 func ConvertLong(long string) (float64, error) {
 	if len(long) < 7 {
-		return 0, fmt.Errorf("Invalid longitude format")
+		return 0, fmt.Errorf("invalid longitude format")
 	}
 
 	// Split the longitude string into degrees and minutes.
@@ -237,7 +236,7 @@ func ConvertLong(long string) (float64, error) {
 // ConvertLat converts a latitude in format ddmm.mmmmmm to degrees.
 func ConvertLat(lat string) (float64, error) {
 	if len(lat) < 6 {
-		return 0, fmt.Errorf("Invalid latitude format")
+		return 0, fmt.Errorf("invalid latitude format")
 	}
 
 	// Split the latitude string into degrees and minutes.
@@ -260,6 +259,7 @@ func ConvertLat(lat string) (float64, error) {
 	return degrees + minutesInDegrees, nil
 }
 
+/*
 func appendToFile(filename string, data string) error {
 	// Open the file in append mode or create if it doesn't exist
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -272,3 +272,4 @@ func appendToFile(filename string, data string) error {
 	_, err = file.WriteString(data + "\n")
 	return err
 }
+*/
