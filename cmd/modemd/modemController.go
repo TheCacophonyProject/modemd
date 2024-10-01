@@ -280,8 +280,14 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		// Set details for signal
 		if mc.Modem.ATReady {
 			signal := make(map[string]interface{})
-			signal["strength"] = valueOrErrorStr(mc.signalStrength())
-			signal["band"] = valueOrErrorStr(mc.readBand())
+			signalStrength, bitErrorRate, err := mc.signalStrength()
+			if err != nil {
+				signal["strength"] = err.Error()
+				signal["bitErrorRate"] = err.Error()
+			} else {
+				signal["strength"] = signalStrength
+				signal["bitErrorRate"] = bitErrorRate
+			}
 			provider, accessTechnology, err := mc.readProvider()
 			if err != nil {
 				signal["provider"] = err.Error()
@@ -538,19 +544,19 @@ func (mc *ModemController) FindModem() bool {
 	}
 }
 
-func (mc *ModemController) signalStrength() (string, error) {
+func (mc *ModemController) signalStrength() (string, string, error) {
 	out, err := mc.RunATCommand("AT+CSQ")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	out = strings.TrimPrefix(out, "+CSQ:")
 	out = strings.TrimSpace(out)
 
 	parts := strings.Split(out, ",")
-	if len(parts) > 1 {
-		return parts[0], nil
+	if len(parts) == 2 {
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
 	} else {
-		return "", fmt.Errorf("unable to read reception, '%s'", out)
+		return "", "", fmt.Errorf("unable to read reception, '%s'", out)
 	}
 }
 
