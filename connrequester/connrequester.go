@@ -1,6 +1,3 @@
-//go:build arm
-// +build arm
-
 package connrequester
 
 import (
@@ -167,13 +164,11 @@ func ping(interfaceName string, host string) bool {
 // Start will start requesting for a connection to be made.
 func (cr *ConnectionRequester) Start() {
 	cr.stateChange <- true
-	return
 }
 
 // Stop will stop requesting for a connection to be made.
 func (cr *ConnectionRequester) Stop() {
 	cr.stateChange <- false
-	return
 }
 
 func (cr *ConnectionRequester) requestConnections() {
