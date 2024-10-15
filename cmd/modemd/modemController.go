@@ -893,7 +893,7 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 		return true, fmt.Sprintf("Modem should be on because minimum connection duration is %v.", mc.MinConnDuration)
 	}
 
-	if saltCommandsRunning() {
+	if mc.IsPowered && saltCommandsRunning() {
 		return true, fmt.Sprintln("Modem should be on because salt commands are running.")
 	}
 
