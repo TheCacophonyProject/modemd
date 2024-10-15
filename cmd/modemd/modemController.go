@@ -39,17 +39,17 @@ import (
 )
 
 type ModemController struct {
-	StartTime              time.Time
-	Modem                  *Modem
-	ModemsConfig           []goconfig.Modem
-	TestHosts              []string
-	TestInterval           time.Duration
-	PowerPin               string
-	InitialOnDuration      time.Duration
-	FindModemDuration      time.Duration // Time in seconds after USB powered on for the modem to be found
-	ConnectionTimeout      time.Duration // Time in seconds for modem to make a connection to the network
-	PingWaitTime           time.Duration
-	PingRetries            int
+	StartTime         time.Time
+	Modem             *Modem
+	ModemsConfig      []goconfig.Modem
+	TestHosts         []string
+	TestInterval      time.Duration
+	PowerPin          string
+	InitialOnDuration time.Duration
+	FindModemDuration time.Duration // Time in seconds after USB powered on for the modem to be found
+	ConnectionTimeout time.Duration // Time in seconds for modem to make a connection to the network
+	PingWaitTime      time.Duration
+	//PingRetries            int
 	RequestOnDuration      time.Duration // Time the modem will stay on in seconds after a request was made
 	RetryInterval          time.Duration
 	RetryFindModemInterval time.Duration
@@ -257,6 +257,8 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 	status["timestamp"] = time.Now().Format(time.RFC1123Z)
 	status["powered"] = mc.IsPowered
 	status["onOffReason"] = mc.onOffReason
+	status["failedToFindModem"] = mc.failedToFindModem
+	status["failedToFindSimCard"] = mc.failedToFindSimCard
 
 	if mc.Modem != nil {
 		// Set details for modem
@@ -265,7 +267,6 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		modem["netdev"] = mc.Modem.Netdev
 		modem["vendor"] = mc.Modem.VendorProduct
 		modem["atReady"] = mc.Modem.ATReady
-		modem["simReady"] = mc.Modem.SimReady
 		modem["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
 		if mc.Modem.ATReady {
 			modem["voltage"] = valueOrErrorStr(mc.readVoltage())
@@ -300,13 +301,13 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		}
 
 		// Set details for SIM card
-		if mc.Modem.SimReady {
-			simCard := make(map[string]interface{})
-			simCard["simCardStatus"] = valueOrErrorStr(mc.CheckSimCard())
+		simCard := make(map[string]interface{})
+		simCard["simCardStatus"] = mc.Modem.SimCardStatus
+		if mc.Modem.SimCardStatus == SimCardReady {
 			simCard["ICCID"] = valueOrErrorStr(mc.readSimICCID())
 			simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
-			status["simCard"] = simCard
 		}
+		status["simCard"] = simCard
 
 		/*
 			if gpsEnabled, err := mc.gpsEnabled(); err != nil {
@@ -821,6 +822,10 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 	log.Printf("Waiting %s for modem to connect", mc.ConnectionTimeout)
 	timeout := time.After(mc.ConnectionTimeout)
 	for {
+		if !mc.ShouldBeOn() {
+			log.Info("Canceling ping test as modem should be off.")
+			return false, nil
+		}
 		select {
 		case <-timeout:
 			mc.lastFailedConnection = time.Now()
@@ -837,7 +842,7 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 			if mc.PingTest() {
 				return true, nil
 			} else {
-				log.Println("Ping test failed.")
+				log.Infof("Ping test failed. Trying again until the %s timeout.", mc.ConnectionTimeout)
 			}
 		}
 	}
@@ -848,20 +853,24 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 // - LastOnRequest: Check if the last "StayOn" request was less than 'RequestOnTime' ago.
 // - OnWindow: //TODO
 func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
-	if mc.failedToFindModem {
-		return false, "Modem should be off because it could not be found on boot."
-	}
-
-	if mc.failedToFindSimCard {
-		return false, "Modem should be off because it failed to find a SIM card."
-	}
-
 	if time.Now().Before(mc.stayOffUntil) {
 		return false, fmt.Sprintf("Modem should be off because it was requested to stay off until %s.", mc.stayOffUntil.Format("2006-01-02 15:04:05"))
 	}
 
 	if time.Now().Before(mc.stayOnUntil) {
 		return true, fmt.Sprintf("Modem should be on because it was requested to stay on until %s.", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
+	}
+
+	if mc.failedToFindModem {
+		return false, "Modem should be off because it could not be found on boot."
+	}
+
+	if mc.failedToFindSimCard {
+		return false, "Modem should be off because it could not find a SIM card."
+	}
+
+	if mc.Modem != nil && mc.Modem.SimCardStatus == SimCardFailed {
+		return false, "Modem should be off because it failed to find a SIM card."
 	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
@@ -941,5 +950,5 @@ func (mc *ModemController) WaitForNextPingTest() bool {
 
 func (mc *ModemController) PingTest() bool {
 	seconds := int(mc.PingWaitTime / time.Second)
-	return mc.Modem.PingTest(seconds, mc.PingRetries, mc.TestHosts)
+	return mc.Modem.PingTest(seconds, mc.TestHosts)
 }

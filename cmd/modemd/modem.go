@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 
 	goconfig "github.com/TheCacophonyProject/go-config"
 )
@@ -14,8 +13,16 @@ type Modem struct {
 	Netdev        string
 	VendorProduct string
 	ATReady       bool
-	SimReady      bool
+	SimCardStatus SimCardStatus
 }
+
+type SimCardStatus string
+
+const (
+	SimCardFinding SimCardStatus = "finding"
+	SimCardReady   SimCardStatus = "ready"
+	SimCardFailed  SimCardStatus = "failed"
+)
 
 // NewModem return a new modem from the config
 func NewModem(config goconfig.Modem) *Modem {
@@ -23,31 +30,26 @@ func NewModem(config goconfig.Modem) *Modem {
 		Name:          config.Name,
 		Netdev:        config.NetDev,
 		VendorProduct: config.VendorProductID,
+		SimCardStatus: SimCardFinding,
 	}
 	return m
 }
 
 // PingTest will try connecting to one of the provides hosts
-func (m *Modem) PingTest(timeoutSec int, retries int, hosts []string) bool {
-	for i := retries; i > 0; i-- {
-		for _, host := range hosts {
-			cmd := exec.Command(
-				"ping",
-				"-I",
-				m.Netdev,
-				"-n",
-				"-q",
-				"-c1",
-				fmt.Sprintf("-w%d", timeoutSec),
-				host)
-			if err := cmd.Run(); err == nil {
-				return true
-			}
+func (m *Modem) PingTest(timeoutSec int, hosts []string) bool {
+	for _, host := range hosts {
+		cmd := exec.Command(
+			"ping",
+			"-I",
+			m.Netdev,
+			"-n",
+			"-q",
+			"-c1",
+			fmt.Sprintf("-w%d", timeoutSec),
+			host)
+		if err := cmd.Run(); err == nil {
+			return true
 		}
-		if i > 1 {
-			log.Printf("ping test failed. %d more retries\n", i-1)
-		}
-		time.Sleep(2 * time.Second)
 	}
 	return false
 }
