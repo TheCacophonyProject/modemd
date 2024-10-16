@@ -84,15 +84,15 @@ func runMain() error {
 	mc := ModemController{
 		StartTime: time.Now(),
 		//ModemsConfig:           conf.ModemsConfig,
-		ModemsConfig:           m,
-		TestHosts:              conf.TestHosts,
-		TestInterval:           conf.TestInterval,
-		PowerPin:               conf.PowerPin,
-		InitialOnDuration:      conf.InitialOnDuration,
-		FindModemDuration:      conf.FindModemDuration,
-		ConnectionTimeout:      conf.ConnectionTimeout,
-		PingWaitTime:           conf.PingWaitTime,
-		PingRetries:            conf.PingRetries,
+		ModemsConfig:      m,
+		TestHosts:         conf.TestHosts,
+		TestInterval:      conf.TestInterval,
+		PowerPin:          conf.PowerPin,
+		InitialOnDuration: conf.InitialOnDuration,
+		FindModemDuration: conf.FindModemDuration,
+		ConnectionTimeout: conf.ConnectionTimeout,
+		PingWaitTime:      conf.PingWaitTime,
+		//PingRetries:            conf.PingRetries,
 		RequestOnDuration:      conf.RequestOnDuration,
 		RetryInterval:          conf.RetryInterval,
 		RetryFindModemInterval: conf.RetryFindModemInterval,
@@ -112,13 +112,19 @@ func runMain() error {
 	}
 
 	for {
-		// =========== Wait until modem should be on ===========
+		// =========== Power off modem if it shouldn't be on then wait until it should be on ===========
 		if !mc.ShouldBeOn() {
-			log.Println("Waiting until modem should be powered on.")
+			log.Println("Powering off USB modem.")
+			if err := mc.SetModemPower(false); err != nil {
+				return err
+			}
+			mc.Modem = nil
 			for !mc.ShouldBeOn() {
 				time.Sleep(5 * time.Second)
 			}
 		}
+
+		// =========== Power on modem ===========
 		if err := mc.SetModemPower(true); err != nil {
 			return err
 		}
@@ -183,17 +189,20 @@ func runMain() error {
 		for retries := 5; retries > 0; retries-- {
 			simStatus, err := mc.CheckSimCard()
 			if err == nil && simStatus == "READY" {
-				mc.Modem.SimReady = true
+				mc.Modem.SimCardStatus = SimCardReady
 				break
 			}
-			log.Printf("SIM card not ready. Will cycle power %d more time(s) to find SIM card", retries)
+			log.Printf("SIM card not ready. Will try %d more time(s) to find SIM card", retries)
 			time.Sleep(5 * time.Second)
 		}
-		if !mc.Modem.SimReady {
-			mc.failedToFindSimCard = true
+		if mc.Modem.SimCardStatus != SimCardReady {
+			mc.Modem.SimCardStatus = SimCardFailed
 			makeModemEvent("noModemSimCard", &mc)
+			mc.failedToFindSimCard = true
 			continue
 		}
+		mc.failedToFindSimCard = false
+		log.Info("SIM card ready.")
 
 		// ========== Checking signal strength. =============
 		log.Println("Checking signal strength.")
@@ -222,8 +231,11 @@ func runMain() error {
 			return err
 		}
 		if !connected {
-			mc.lastFailedConnection = time.Now()
-			makeModemEvent("modemPingFail", &mc)
+			// If the modem should be on but failed to connect, then make an event
+			if mc.ShouldBeOn() {
+				mc.lastFailedConnection = time.Now()
+				makeModemEvent("modemPingFail", &mc)
+			}
 			continue
 		}
 
@@ -248,12 +260,6 @@ func runMain() error {
 				break
 			}
 		}
-
-		log.Println("Powering off USB modem.")
-		if err := mc.SetModemPower(false); err != nil {
-			return err
-		}
-		mc.Modem = nil
 	}
 }
 
