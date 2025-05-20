@@ -20,7 +20,6 @@ package main
 
 import (
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
@@ -209,11 +208,11 @@ func runMain() error {
 		// TODO make configurable to how long it will try to find a connection
 		gotSignal := false
 		for i := 0; i < 5; i++ {
-			strengthStr, bitErrorRate, _ := mc.signalStrength()
-			strength, err := strconv.Atoi(strengthStr)
-			if err == nil && strength != 99 {
-				log.Printf("Signal strength: %s", strengthStr)
-				log.Printf("Bit error rate: %s", bitErrorRate)
+			strengthStr, bitErrorRate, status, _ := mc.signalStrength()
+			if strengthStr != 99 {
+				log.Printf("Signal strength: %d", strengthStr)
+				log.Printf("Bit error rate: %d", bitErrorRate)
+				log.Printf("Signal status: %s", status)
 				gotSignal = true
 				break
 			}
@@ -265,7 +264,7 @@ func runMain() error {
 
 func makeModemEvent(eventType string, mc *ModemController) {
 	log.Printf("Making modem event '%s'.", eventType)
-	signalStrength, bitErrorRate, err := mc.signalStrength()
+	signalStrength, bitErrorRate, status, err := mc.signalStrength()
 	if err != nil {
 		log.Printf("Failed to get signal strength: %s", err)
 	}
@@ -298,6 +297,7 @@ func makeModemEvent(eventType string, mc *ModemController) {
 		Timestamp: time.Now(),
 		Type:      eventType,
 		Details: map[string]interface{}{
+			"signalStatus":     status,
 			"signalStrengthDB": bitErrorRate,
 			"signalStrength":   signalStrength,
 			"band":             band,

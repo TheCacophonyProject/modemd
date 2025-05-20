@@ -281,7 +281,7 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		// Set details for signal
 		if mc.Modem.ATReady {
 			signal := make(map[string]interface{})
-			signalStrength, bitErrorRate, err := mc.signalStrength()
+			signalStrength, bitErrorRate, signalStatus, err := mc.signalStrength()
 			if err != nil {
 				signal["strength"] = err.Error()
 				signal["bitErrorRate"] = err.Error()
@@ -289,6 +289,7 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 				signal["strength"] = signalStrength
 				signal["bitErrorRate"] = bitErrorRate
 			}
+			signal["status"] = signalStatus
 			provider, accessTechnology, err := mc.readProvider()
 			if err != nil {
 				signal["provider"] = err.Error()
@@ -308,18 +309,6 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 			simCard["provider"] = valueOrErrorStr(mc.readSimProvider())
 		}
 		status["simCard"] = simCard
-
-		/*
-			if gpsEnabled, err := mc.gpsEnabled(); err != nil {
-				status["GPS"] = err.Error()
-			} else if !gpsEnabled {
-				status["GPS"] = "GPS off"
-			} else if gpsData, err := mc.GetGPSStatus(); err != nil {
-				status["GPS"] = err.Error()
-			} else {
-				status["GPS"] = gpsData.ToDBusMap()
-			}
-		*/
 	}
 
 	return status, nil
@@ -545,19 +534,38 @@ func (mc *ModemController) FindModem() bool {
 	}
 }
 
-func (mc *ModemController) signalStrength() (string, string, error) {
+func (mc *ModemController) signalStrength() (int, int, string, error) {
 	out, err := mc.RunATCommand("AT+CSQ")
 	if err != nil {
-		return "", "", err
+		return 0, 0, "", err
 	}
 	out = strings.TrimPrefix(out, "+CSQ:")
 	out = strings.TrimSpace(out)
 
 	parts := strings.Split(out, ",")
 	if len(parts) == 2 {
-		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+		signalStrength, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil {
+			log.Errorf("Failed to convert signal strength to int: %v, Output: %s", err, out)
+			return 0, 0, "", err
+		}
+		bitErrorRate, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			log.Errorf("Failed to convert bit error rate to int: %v, Output: %s", err, out)
+			return 0, 0, "", err
+		}
+		status := ""
+		if (bitErrorRate > 0 && bitErrorRate != 99) || signalStrength < 9 {
+			status = "poor"
+		} else if signalStrength < 19 {
+			status = "ok"
+		} else {
+			status = "good"
+		}
+
+		return signalStrength, bitErrorRate, status, nil
 	} else {
-		return "", "", fmt.Errorf("unable to read reception, '%s'", out)
+		return 0, 0, "", fmt.Errorf("unable to read reception, '%s'", out)
 	}
 }
 
