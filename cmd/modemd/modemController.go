@@ -515,6 +515,7 @@ func (mc *ModemController) FindModem() bool {
 			// Have to enable USB mode or else the VendorProductID will be different and it won't be found.
 			usbMode, err := mc.IsInUSBMode()
 			if err != nil {
+				log.Errorf("Failed to check if in USB mode: %v", err)
 				continue
 			}
 			if !usbMode {
