@@ -556,7 +556,10 @@ func (mc *ModemController) signalStrength() (int, int, string, error) {
 			return 0, 0, "", err
 		}
 		status := ""
-		if (bitErrorRate > 0 && bitErrorRate != 99) || signalStrength < 9 {
+
+		if signalStrength == 99 {
+			status = "no signal"
+		} else if (bitErrorRate > 0 && bitErrorRate != 99) || signalStrength < 9 {
 			status = "poor"
 		} else if signalStrength < 19 {
 			status = "ok"
