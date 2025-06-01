@@ -286,8 +286,8 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 				signal["strength"] = err.Error()
 				signal["bitErrorRate"] = err.Error()
 			} else {
-				signal["strength"] = signalStrength
-				signal["bitErrorRate"] = bitErrorRate
+				signal["strength"] = strconv.Itoa(signalStrength)   // Converting to string for compatibility reasons
+				signal["bitErrorRate"] = strconv.Itoa(bitErrorRate) // Converting to string for compatibility reasons
 			}
 			signal["status"] = signalStatus
 			provider, accessTechnology, err := mc.readProvider()
