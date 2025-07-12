@@ -48,6 +48,23 @@ func newATManager() *atManager {
 	return am
 }
 
+func (am *atManager) asyncRequest(cmd string, timeout time.Time, retries int) chan (result) {
+	// Make AT request
+	req := atRequest{cmd: cmd, reply: make(chan result), timeout: timeout, retries: retries}
+	// Send request to queue
+	am.requests <- req
+	// Return channel
+	return req.reply
+}
+
+func (am *atManager) request(cmd string, timeoutmSec int, retries int) (string, error) {
+	// Make async request
+	reply := am.asyncRequest(cmd, time.Now().Add(time.Duration(timeoutmSec)*time.Millisecond), retries)
+	// Wait for reply
+	result := <-reply
+	return result.resp, result.err
+}
+
 // Function to process the AT commands one by one.
 func (am *atManager) processRequestsLoop() {
 	for {
@@ -57,7 +74,7 @@ func (am *atManager) processRequestsLoop() {
 }
 
 func processATRequest(req atRequest) result {
-	atPort := "/dev/ttyUSB0"
+	atPort := "/dev/UsbModemAT"
 
 	// Check if the request has timed out while waiting in the queue.
 	if time.Now().After(req.timeout) {

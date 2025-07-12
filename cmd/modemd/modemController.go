@@ -19,7 +19,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -27,13 +26,10 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/TheCacophonyProject/event-reporter/v3/eventclient"
-	goconfig "github.com/TheCacophonyProject/go-config"
 	"github.com/TheCacophonyProject/go-utils/saltutil"
-	"github.com/tarm/serial"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
 )
@@ -41,7 +37,7 @@ import (
 type ModemController struct {
 	StartTime         time.Time
 	Modem             *Modem
-	ModemsConfig      []goconfig.Modem
+	ModemsConfig      []ModemConfig
 	TestHosts         []string
 	TestInterval      time.Duration
 	PowerPin          string
@@ -68,8 +64,6 @@ type ModemController struct {
 
 	failedToFindModem   bool
 	failedToFindSimCard bool
-
-	mu sync.Mutex
 }
 
 func (mc *ModemController) NewOnRequest() {
@@ -112,7 +106,7 @@ func (mc *ModemController) EnableGPS() error {
 */
 
 func (mc *ModemController) DisableGPS() error {
-	_, err := mc.RunATCommand("AT+CGPS=0")
+	_, err := mc.RunATCommand("AT+CGPS=0", 1000, 1)
 	return err
 }
 
@@ -265,7 +259,7 @@ func (mc *ModemController) GetStatus() (map[string]interface{}, error) {
 		modem := make(map[string]interface{})
 		modem["name"] = mc.Modem.Name
 		modem["netdev"] = mc.Modem.Netdev
-		modem["vendor"] = mc.Modem.VendorProduct
+		modem["vendor"] = mc.Modem.VendorID + ":" + mc.Modem.ProductID
 		modem["atReady"] = mc.Modem.ATReady
 		modem["connectedTime"] = mc.connectedTime.Format(time.RFC1123Z)
 		if mc.Modem.ATReady {
@@ -323,7 +317,7 @@ func valueOrErrorStr(s interface{}, e error) interface{} {
 }
 
 func (mc *ModemController) readVoltage() (float64, error) {
-	out, err := mc.RunATCommand("AT+CBC")
+	out, err := mc.RunATCommand("AT+CBC", 1000, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -343,7 +337,7 @@ func (mc *ModemController) readVoltage() (float64, error) {
 
 func (mc *ModemController) readProvider() (string, string, error) {
 	//+COPS: 0,0,"Spark NZ Spark NZ",7
-	out, err := mc.RunATCommand("AT+COPS?")
+	out, err := mc.RunATCommand("AT+COPS?", 1000, 1)
 	if err != nil {
 		return "", "", err
 	}
@@ -375,7 +369,7 @@ func (mc *ModemController) readProvider() (string, string, error) {
 }
 
 func (mc *ModemController) readSimICCID() (string, error) {
-	out, err := mc.RunATCommand("AT+CICCID")
+	out, err := mc.RunATCommand("AT+CICCID", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -385,7 +379,7 @@ func (mc *ModemController) readSimICCID() (string, error) {
 }
 
 func (mc *ModemController) readTemp() (int, error) {
-	out, err := mc.RunATCommand("AT+CPMUTEMP")
+	out, err := mc.RunATCommand("AT+CPMUTEMP", 1000, 1)
 	if err != nil {
 		return 0, err
 	}
@@ -400,7 +394,7 @@ func (mc *ModemController) readTemp() (int, error) {
 }
 
 func (mc *ModemController) readSimProvider() (string, error) {
-	out, err := mc.RunATCommand("AT+CSPN?")
+	out, err := mc.RunATCommand("AT+CSPN?", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -415,7 +409,7 @@ func (mc *ModemController) readSimProvider() (string, error) {
 }
 
 func (mc *ModemController) getManufacturer() (string, error) {
-	out, err := mc.RunATCommand("AT+CGMI")
+	out, err := mc.RunATCommand("AT+CGMI", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -423,7 +417,7 @@ func (mc *ModemController) getManufacturer() (string, error) {
 }
 
 func (mc *ModemController) getModel() (string, error) {
-	out, err := mc.RunATCommand("AT+CGMR")
+	out, err := mc.RunATCommand("AT+CGMR", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -433,7 +427,7 @@ func (mc *ModemController) getModel() (string, error) {
 }
 
 func (mc *ModemController) getSerialNumber() (string, error) {
-	out, err := mc.RunATCommand("AT+CGSN")
+	out, err := mc.RunATCommand("AT+CGSN", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -452,7 +446,7 @@ func (mc *ModemController) getSerialNumber() (string, error) {
 // Firmware upgrades?
 
 func (mc *ModemController) getAPN() (string, error) {
-	out, err := mc.RunATCommand("AT+CGDCONT?")
+	out, err := mc.RunATCommand("AT+CGDCONT?", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -469,7 +463,7 @@ func (mc *ModemController) getAPN() (string, error) {
 }
 
 func (mc *ModemController) setAPN(apn string) error {
-	_, err := mc.RunATCommand(fmt.Sprintf("AT+CGDCONT=1,\"IP\",\"%s\"", apn))
+	_, err := mc.RunATCommand(fmt.Sprintf("AT+CGDCONT=1,\"IP\",\"%s\"", apn), 1000, 1)
 	if err != nil {
 		return err
 	}
@@ -485,11 +479,11 @@ func (mc *ModemController) setAPN(apn string) error {
 
 func (mc *ModemController) CheckSimCard() (string, error) {
 	// Enable verbose error messages.
-	_, err := mc.RunATCommand("AT+CMEE=2")
+	_, err := mc.RunATCommand("AT+CMEE=2", 1000, 1)
 	if err != nil {
 		return "", err
 	}
-	out, err := mc.RunATCommand("AT+CPIN?")
+	out, err := mc.RunATCommand("AT+CPIN?", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -498,6 +492,7 @@ func (mc *ModemController) CheckSimCard() (string, error) {
 	return out, nil
 }
 
+/*
 func (mc *ModemController) FindModem() bool {
 	timeout := time.After(mc.FindModemDuration)
 	for {
@@ -534,9 +529,10 @@ func (mc *ModemController) FindModem() bool {
 		}
 	}
 }
+*/
 
 func (mc *ModemController) signalStrength() (int, int, string, error) {
-	out, err := mc.RunATCommand("AT+CSQ")
+	out, err := mc.RunATCommand("AT+CSQ", 1000, 1)
 	if err != nil {
 		return 0, 0, "", err
 	}
@@ -559,6 +555,7 @@ func (mc *ModemController) signalStrength() (int, int, string, error) {
 
 		if signalStrength == 99 {
 			status = "no signal"
+			// TODO update what a "poor" signal is, could be needed to be increases to 15
 		} else if (bitErrorRate > 0 && bitErrorRate != 99) || signalStrength < 9 {
 			status = "poor"
 		} else if signalStrength < 19 {
@@ -574,7 +571,7 @@ func (mc *ModemController) signalStrength() (int, int, string, error) {
 }
 
 func (mc *ModemController) readBand() (string, error) {
-	out, err := mc.RunATCommand("AT+CPSI?")
+	out, err := mc.RunATCommand("AT+CPSI?", 1000, 1)
 	if err != nil {
 		return "", err
 	}
@@ -590,129 +587,191 @@ func (mc *ModemController) readBand() (string, error) {
 	return "", err
 }
 
-func (mc *ModemController) RunATCommand(atCommand string) (string, error) {
-	if !mc.IsPowered {
-		return "", fmt.Errorf("modem is not powered")
-	}
-	_, out, err := mc.RunATCommandTotalOutput(atCommand)
-	return out, err
+func (mc *ModemController) RunATCommand(atCommand string, timeoutMsec int, attempts int) (string, error) {
+	return mc.Modem.ATManager.request(atCommand, timeoutMsec, attempts)
+	//_, out, err := mc.RunATCommandTotalOutput(atCommand, timeoutMsec, attempts)
+	//return out, err
 }
 
-func (mc *ModemController) RunATCommandTotalOutput(atCommand string) (string, string, error) {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
-	s, err := serial.OpenPort(c)
-	if err != nil {
-		return "", "", err
-	}
-	defer s.Close()
-	s.Flush()
-	_, err = s.Write([]byte("ATE0\r"))
-	if err != nil {
-		return "", "", err
-	}
-	time.Sleep(time.Millisecond * 10)
-	s.Flush()
-	_, err = s.Write([]byte(atCommand + "\r"))
-	if err != nil {
-		return "", "", err
-	}
+type ATError struct {
+	Cause  error
+	Cmd    string
+	Detail string
+}
 
-	reader := bufio.NewReader(s)
-	failed := false
-	total := ""
-	for {
-		line, err := reader.ReadString('\n')
+func (e *ATError) Error() string {
+	if e.Detail == "" {
+		return fmt.Sprintf("failed to run AT command '%s' because %s", e.Cmd, e.Cause)
+	}
+	return fmt.Sprintf("failed to run AT command '%s' because %s, extra details: %s", e.Cmd, e.Cause, e.Detail)
+}
+
+func (e *ATError) Unwrap() error { return e.Cause }
+
+/*
+	func (mc *ModemController) RunATCommandTotalOutput(atCommand string, timeoutMsec int, attempts int) (string, string, error) {
+		startTime := time.Now()
+
+		// Try to get a lock on the AT mutex
+		if mc.mu.TryLock() {
+			defer mc.mu.Unlock()
+		}
+
+		for {
+			//
+			if mc.mu.TryLock() {
+				defer mc.mu.Unlock()
+				break
+			}
+
+			// Check if timeout has been reached
+			if time.Since(startTime).Seconds() > float64(timeoutSec) {
+
+			}
+		}
+
+		return "", "", &ATError{}
+
+		// Wait for serial port to be available.
+		atPort := "/dev/UsbModemAT"
+		startTime := time.Now()
+		for {
+			_, err := os.Stat(atPort)
+			if err == nil {
+				break // Serial port is available
+			}
+			if os.IsNotExist(err) {
+				// If the serial port is not yet available, wait a second and try again.
+				if time.Since(startTime).Seconds() > float64(timeoutSec) {
+					return "", "", fmt.Errorf("timed out waiting for serial port %s", atPort)
+				}
+				time.Sleep(time.Second)
+			}
+
+			if time.Since(startTime).Seconds() > float64(timeoutSec) {
+				return "", "", fmt.Errorf("timed out waiting for serial port %s", atPort)
+			}
+			time.Sleep(time.Second)
+		}
+
+		mc.mu.Lock()
+		defer mc.mu.Unlock()
+		c := &serial.Config{Name: atPort, Baud: 115200, ReadTimeout: 2 * time.Second}
+		s, err := serial.OpenPort(c)
 		if err != nil {
-			return total, "", err
+			return "", "", err
 		}
-		line = strings.TrimSpace(line)
-		total += line
-		if line == "ERROR" {
-			failed = true
-			break
+		defer s.Close()
+		s.Flush()
+		_, err = s.Write([]byte("ATE0\r"))
+		if err != nil {
+			return "", "", err
 		}
-		if line == "OK" {
-			break
+		time.Sleep(time.Millisecond * 10)
+		s.Flush()
+		_, err = s.Write([]byte(atCommand + "\r"))
+		if err != nil {
+			return "", "", err
 		}
-		if len(line) > 0 {
-			return total, line, nil
+
+		reader := bufio.NewReader(s)
+		failed := false
+		total := ""
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return total, "", err
+			}
+			line = strings.TrimSpace(line)
+			total += line
+			if line == "ERROR" {
+				failed = true
+				break
+			}
+			if line == "OK" {
+				break
+			}
+			if len(line) > 0 {
+				return total, line, nil
+			}
 		}
-	}
-	if failed {
-		return total, "", fmt.Errorf("AT command '%s' failed, output: '%s'", atCommand, total)
-	}
-	return total, "", nil
-}
-
-func (mc *ModemController) RunATCommandOld(cmd string, errorOnNoOK bool) (string, error) {
-	c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
-	s, err := serial.OpenPort(c)
-	if err != nil {
-		return "", err
+		if failed {
+			return total, "", fmt.Errorf("AT command '%s' failed, output: '%s'", atCommand, total)
+		}
+		return total, "", nil
 	}
 
-	s.Flush()
+	func (mc *ModemController) RunATCommandOld(cmd string, errorOnNoOK bool) (string, error) {
+		c := &serial.Config{Name: "/dev/UsbModemAT", Baud: 115200, ReadTimeout: 2 * time.Second}
+		s, err := serial.OpenPort(c)
+		if err != nil {
+			return "", err
+		}
 
-	_, err = s.Write([]byte(cmd + "\r"))
-	if err != nil {
-		return "", err
+		s.Flush()
+
+		_, err = s.Write([]byte(cmd + "\r"))
+		if err != nil {
+			return "", err
+		}
+
+		buf := make([]byte, 1280)
+		n, err := s.Read(buf)
+
+		if err != nil {
+			return "", err
+		}
+
+		// TODO make more robust
+		response := string(buf[:n])
+
+		response = strings.TrimSpace(response)
+		if errorOnNoOK && response != "OK" {
+			return response, fmt.Errorf("received response is not OK. Response: '%s'", response)
+		}
+
+		return response, nil
 	}
-
-	buf := make([]byte, 1280)
-	n, err := s.Read(buf)
-
-	if err != nil {
-		return "", err
-	}
-
-	// TODO make more robust
-	response := string(buf[:n])
-
-	response = strings.TrimSpace(response)
-	if errorOnNoOK && response != "OK" {
-		return response, fmt.Errorf("received response is not OK. Response: '%s'", response)
-	}
-
-	return response, nil
-}
-
-func (mc *ModemController) EnableUSBMode() error {
-	log.Println("Enabling  USB mode on modem")
-	_, err := mc.RunATCommand("AT+CUSBPIDSWITCH=9011,1,1")
+*/
+func (mc *ModemController) SetUSBMode(mode string) error {
+	_, err := mc.RunATCommand(fmt.Sprintf("AT+CUSBPIDSWITCH=%s,1,1", mode), 1000, 1)
 	if err != nil {
 		return err
 	}
-	for i := 0; i < 10; i++ {
-		time.Sleep(time.Second)
-		usbMode, err := mc.IsInUSBMode()
-		if err != nil {
-			return err
+	return nil
+	/*
+		for i := 0; i < 10; i++ {
+			time.Sleep(time.Second)
+			usbMode, _, err := mc.IsInUSBMode()
+			if err != nil {
+				return err
+			}
+			if usbMode {
+				return nil
+			}
 		}
-		if usbMode {
-			return nil
-		}
-	}
-	return fmt.Errorf("failed to enable USB mode")
+		return fmt.Errorf("failed to enable USB mode")
+	*/
 }
 
-func (mc *ModemController) IsInUSBMode() (bool, error) {
+//AT+CUSBPIDSWITCH=9001,1,1
+
+func (mc *ModemController) IsInUSBMode() (inUSBMode bool, foundInterface bool, err error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		return false, fmt.Errorf("failed to get network interfaces: %w", err)
+		return false, false, fmt.Errorf("failed to get network interfaces: %w", err)
 	}
 	for _, iface := range interfaces {
 		if iface.Name == "wwan0" {
 			log.Println("Found wwan0 interface.")
-			return false, nil
+			return false, true, nil
 		}
 		if iface.Name == "usb0" {
 			log.Println("Found usb0 interface.")
-			return true, nil
+			return true, true, nil
 		}
 	}
-	return false, fmt.Errorf("failed to find wwan0 or usb0 interface")
+	return false, false, nil
 }
 
 func (mc *ModemController) SetModemPower(on bool) error {
@@ -734,7 +793,7 @@ func (mc *ModemController) SetModemPower(on bool) error {
 			return fmt.Errorf("failed to enable power for the modem: %v", err)
 		}
 	} else {
-		_, _ = mc.RunATCommand("AT+CPOF")
+		_, _ = mc.RunATCommand("AT+CPOF", 1000, 0)
 		if mc.Modem != nil {
 			mc.Modem.ATReady = false
 		}
@@ -749,7 +808,7 @@ func (mc *ModemController) SetModemPower(on bool) error {
 			if err != nil {
 				return fmt.Errorf("failed to check if modem is powered off: %v, output: %s", err, out)
 			}
-			if strings.Contains(string(out), mc.Modem.VendorProduct) {
+			if strings.Contains(string(out), mc.Modem.VendorID) {
 				eventclient.AddEvent(eventclient.Event{
 					Timestamp: time.Now().UTC(),
 					Type:      "failed-modem-shutdown",
@@ -828,6 +887,7 @@ func (mc *ModemController) CycleModemPower() error {
 	return mc.SetModemPower(true)
 }
 
+/*
 // WaitForConnection will return false if no connection is made before either
 // it timeouts or the modem should no longer be powered.
 func (mc *ModemController) WaitForConnection() (bool, error) {
@@ -859,6 +919,7 @@ func (mc *ModemController) WaitForConnection() (bool, error) {
 		}
 	}
 }
+*/
 
 // ShouldBeOff will look at the following factors to determine if the modem should be off.
 // - InitialOnTime: Modem should be on for a set amount of time at the start.
@@ -944,23 +1005,6 @@ func (mc *ModemController) ShouldBeOn() bool {
 	return on
 }
 
-// WaitForNextPingTest will return false if when waiting ShouldBeOff returns
-// true, otherwise will return true after waiting.
-func (mc *ModemController) WaitForNextPingTest() bool {
-	timeout := time.After(mc.TestInterval)
-	for {
-		select {
-		case <-timeout:
-			return true
-		case <-time.After(time.Second):
-			if !mc.ShouldBeOn() {
-				return false
-			}
-		}
-	}
-}
-
-func (mc *ModemController) PingTest() bool {
-	seconds := int(mc.PingWaitTime / time.Second)
-	return mc.Modem.PingTest(seconds, mc.TestHosts)
+func (mc *ModemController) PingTest(timeoutSec int) bool {
+	return mc.Modem.PingTest(timeoutSec, mc.TestHosts)
 }
