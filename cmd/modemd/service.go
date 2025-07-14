@@ -121,7 +121,11 @@ func (s service) RunATCommand(atCommand string) (string, string, *dbus.Error) {
 	if s.mc.Modem != nil && !s.mc.Modem.ATReady {
 		return "", "", makeDbusError("RunATCommand", errors.New("modem not ready for AT commands"))
 	}
-	totalOut, out, err := s.mc.RunATCommandTotalOutput(atCommand)
+
+	out, err := s.mc.RunATCommand(atCommand, 1000, 1)
+	totalOut := "Not supporting total out at the moment, TODO add this back in."
+	// TODO support full output again.
+	//totalOut, out, err := s.mc.RunATCommandTotalOutput(atCommand, 1000, 1)
 	if err != nil {
 		log.Println(err)
 		return "", "", makeDbusError("RunATCommand", err)

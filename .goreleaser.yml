@@ -64,6 +64,10 @@ nfpms:
         dst: /etc/dbus-1/system.d/org.cacophony.modemd.conf
       - src: _release/99-modem-udev.rules
         dst: /etc/udev/rules.d/99-modem-udev.rules
+      - src: _release/usbserial.conf
+        dst: /etc/modules-load.d/usbserial.conf
+      - src: _release/usbserial.modprobe.conf
+        dst: /etc/modprobe.d/usbserial.conf
     scripts:
       postinstall: "_release/postinstall.sh"
 

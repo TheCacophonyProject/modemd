@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-
-	goconfig "github.com/TheCacophonyProject/go-config"
 )
 
 type Modem struct {
 	Name          string
 	Netdev        string
-	VendorProduct string
+	VendorID      string
+	ProductID     string
 	ATReady       bool
 	SimCardStatus SimCardStatus
+	ATManager     *atManager
 }
 
 type SimCardStatus string
@@ -25,11 +25,12 @@ const (
 )
 
 // NewModem return a new modem from the config
-func NewModem(config goconfig.Modem) *Modem {
+func NewModem(config ModemConfig) *Modem {
 	m := &Modem{
 		Name:          config.Name,
 		Netdev:        config.NetDev,
-		VendorProduct: config.VendorProductID,
+		VendorID:      config.VendorID,
+		ProductID:     config.ProductID,
 		SimCardStatus: SimCardFinding,
 	}
 	return m

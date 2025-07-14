@@ -5,7 +5,7 @@ ConditionPathExists=/etc/salt/minion_id
 
 [Service]
 Type=simple
-ExecStart=/bin/sh -c "sleep 10; /usr/bin/modemd"
+ExecStart=/usr/bin/modemd
 Restart=on-failure
 RestartSec=5s
 

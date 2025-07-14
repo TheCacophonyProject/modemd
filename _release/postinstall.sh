@@ -10,4 +10,7 @@ udevadm control --reload-rules
 
 systemctl daemon-reload
 systemctl enable modemd.service
-systemctl restart modemd.service
+
+# Using start instead of restart to avoid restarting the service if it's already running, causing the internet to turn off potentially
+# At the end of a salt update it will restart the service if it was updated.
+systemctl start modemd.service

@@ -1,13 +1,14 @@
-# Need to have two separate rules to avoid mixing attributes from multiple parent devices.
+# Rules for modem in 9001 mode, default mode the modem comes in.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{MODEM_9001}="1"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9001}=="1", ATTRS{bInterfaceNumber}=="02", SYMLINK+="UsbModemAT"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9001}=="1", ATTRS{bInterfaceNumber}=="03", SYMLINK+="UsbModemAT2"
 
-# Rule to check that it is the Qualcomm Modem.
-ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{MODEM}="1"
-# Rule to check that it is the interface that can accept AT commands (bInterfaceNumber==02).
-ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM}=="1", ATTRS{bInterfaceNumber}=="02", SYMLINK+="UsbModemAT"
+# Rules for Modem in 9011 mode, previous mode we were using the modem in.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9011", ENV{MODEM_9011}="1"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9011}=="1", ATTRS{bInterfaceNumber}=="04", SYMLINK+="UsbModemAT"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9011}=="1", ATTRS{bInterfaceNumber}=="05", SYMLINK+="UsbModemAT2"
 
-# Rule to check that it is the Qualcomm Modem.
-ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9011", ENV{MODEM}="1"
-# Rule to check that it is the interface that can accept AT commands (bInterfaceNumber==04).
-ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM}=="1", ATTRS{bInterfaceNumber}=="04", SYMLINK+="UsbModemAT"
-# Rule to check that it is the interface that can accept AT commands (bInterfaceNumber==05).
-ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM}=="1", ATTRS{bInterfaceNumber}=="05", SYMLINK+="UsbModemAT2"
+# Rule for Modem in 9018 mode, new mode we want to be using the modem in.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9018", ENV{MODEM_9018}="1"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9018}=="1", ATTRS{bInterfaceNumber}=="02", SYMLINK+="UsbModemAT"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9018}=="1", ATTRS{bInterfaceNumber}=="03", SYMLINK+="UsbModemAT2"

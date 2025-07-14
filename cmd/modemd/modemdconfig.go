@@ -19,13 +19,22 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/TheCacophonyProject/go-config"
 )
 
+type ModemConfig struct {
+	Name      string
+	NetDev    string
+	VendorID  string
+	ProductID string
+}
+
 type ModemdConfig struct {
-	ModemsConfig           []config.Modem
+	ModemsConfig           []ModemConfig
 	TestHosts              []string
 	TestInterval           time.Duration
 	PowerPin               string
@@ -62,8 +71,23 @@ func ParseModemdConfig(configDir string) (*ModemdConfig, error) {
 		return nil, err
 	}
 
+	modemsConfig := []ModemConfig{}
+
+	for _, m := range mdConf.Modems {
+		vendorProductIDparts := strings.Split(m.VendorProductID, ":")
+		if len(vendorProductIDparts) != 2 {
+			return nil, fmt.Errorf("invalid vendor product ID '%s'", m.VendorProductID)
+		}
+		modemsConfig = append(modemsConfig, ModemConfig{
+			Name:      m.Name,
+			NetDev:    m.NetDev,
+			VendorID:  vendorProductIDparts[0],
+			ProductID: vendorProductIDparts[1],
+		})
+	}
+
 	return &ModemdConfig{
-		ModemsConfig:           mdConf.Modems,
+		ModemsConfig:           modemsConfig,
 		TestHosts:              testHosts.URLs,
 		TestInterval:           mdConf.TestInterval,
 		PowerPin:               gpio.ModemPower,
