@@ -21,6 +21,21 @@ var (
 	ErrATTestCommandFailed = errors.New("test AT command failed")
 )
 
+type ATError struct {
+	Cause  error
+	Cmd    string
+	Detail string
+}
+
+func (e *ATError) Error() string {
+	if e.Detail == "" {
+		return fmt.Sprintf("failed to run AT command '%s' because %s", e.Cmd, e.Cause)
+	}
+	return fmt.Sprintf("failed to run AT command '%s' because %s, extra details: %s", e.Cmd, e.Cause, e.Detail)
+}
+
+func (e *ATError) Unwrap() error { return e.Cause }
+
 // Struct for AT command requests. When/if a command is run, the result will be sent to the reply channel
 type atRequest struct {
 	cmd     string      // The AT command to be run.
@@ -74,6 +89,7 @@ func (am *atManager) processRequestsLoop() {
 }
 
 func processATRequest(req atRequest) result {
+	// TODO: Check if the command is available with ?
 	atPort := "/dev/UsbModemAT"
 
 	// Check if the request has timed out while waiting in the queue.
@@ -130,7 +146,8 @@ func processATRequest(req atRequest) result {
 		if err == nil {
 			return result{response, nil} // Success in running AT command.
 		}
-		lastErr = err // When trying again, if timeout or retry limit is reached, we can include the last error in the result.
+		lastErr = err                      // When trying again, if timeout or retry limit is reached, we can include the last error in the result.
+		time.Sleep(100 * time.Millisecond) // Wait a little bit before trying again.
 	}
 }
 
@@ -145,34 +162,53 @@ func attemptATCommand(req atRequest, atPort string) (string, error) {
 	defer serialPort.Close()
 
 	// Disable echo. This makes it easier to process the response and also checks that the AT port is working.
-	response, err := runATCommand(serialPort, "ATE0")
+	fullResponse, _, err := runATCommand(serialPort, "ATE0")
+	log.Debugf("AT command 'ATE0' full response: %s", formatFullResponse(fullResponse))
 	if errors.Is(err, ErrATErrorResponse) {
 		// The AT command was run successfully, but it got an error response.
 		// We know that this command should work so we will try again.
 		// Am setting err to ErrATTestCommandFailed so if we time out/get to retry limit it will add this error to the result.
-		log.Errorf("ATE0 command failed. Error: %v, Response: '%s'", err, response)
+		log.Errorf("ATE0 command failed. Error: %v, Full response: '%s'", err, formatFullResponse(fullResponse))
 		return "", ErrATTestCommandFailed
 	}
 	if err != nil {
 		// There was an error with running the ATE0 command.
-		return "", fmt.Errorf("failed to run ATE0 command. Error: %v, Response: '%s'", err, response)
+		return "", fmt.Errorf("failed to run ATE0 command. Error: %v, Full response: %s", err, formatFullResponse(fullResponse))
 	}
 
 	// Run the given AT command
-	return runATCommand(serialPort, req.cmd)
+	fullResponse, response, err := runATCommand(serialPort, req.cmd)
+	log.Debugf("AT command '%s' full response: %s", req.cmd, formatFullResponse(fullResponse))
+	return response, err
 }
 
-// runATCommand will run a singular AT command.
-func runATCommand(serialPort *serial.Port, atCommand string) (response string, err error) {
+// Will return the
+func formatFullResponse(fullResponse string) string {
+	lines := strings.Split(fullResponse, "\n")
+	if len(lines) <= 1 {
+		return fmt.Sprintf("'%s'", fullResponse)
+	}
+	formattedResponse := "\n" // Start it on a new line if it has multiple lines.
+	for i, line := range strings.Split(fullResponse, "\n") {
+		formattedResponse += "  " + line
+		if i < len(lines)-1 {
+			formattedResponse += "\n"
+		}
+	}
+	return formattedResponse
+}
+
+// runATCommand will run a singular AT command. It will return the total output and also the last line that wasn't empty or the OK/ERROR response.
+func runATCommand(serialPort *serial.Port, atCommand string) (totalResponse, lastLine string, err error) {
 	// Send command
 	if err = serialPort.Flush(); err != nil {
-		return "", fmt.Errorf("failed to flush serial: %w", err)
+		return "", "", fmt.Errorf("failed to flush serial: %w", err)
 	}
 	if _, err = serialPort.Write([]byte(atCommand + "\r")); err != nil {
-		return "", fmt.Errorf("failed to write AT command: %w", err)
+		return "", "", fmt.Errorf("failed to write AT command: %w", err)
 	}
 	if err := serialPort.Flush(); err != nil {
-		return "", fmt.Errorf("failed to flush serial: %w", err)
+		return "", "", fmt.Errorf("failed to flush serial: %w", err)
 	}
 
 	time.Sleep(10 * time.Millisecond) // Optional
@@ -191,7 +227,7 @@ func runATCommand(serialPort *serial.Port, atCommand string) (response string, e
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
-			return "", fmt.Errorf("read error: %w", err)
+			return "", "", fmt.Errorf("read error: %w", err)
 		}
 		if n == 0 {
 			time.Sleep(10 * time.Millisecond)
@@ -199,7 +235,6 @@ func runATCommand(serialPort *serial.Port, atCommand string) (response string, e
 		}
 
 		lineBuf.Write(buffer[:n])
-
 		for {
 			line, err := lineBuf.ReadString('\n')
 			if err != nil {
@@ -216,12 +251,12 @@ func runATCommand(serialPort *serial.Port, atCommand string) (response string, e
 
 			switch {
 			case line == "OK":
-				return strings.Join(output, "\n"), nil
+				return strings.Join(output, "\n"), strings.Join(output[:len(output)-1], "\n"), nil
 			case line == "ERROR", strings.HasPrefix(line, "+CME ERROR"), strings.HasPrefix(line, "+CMS ERROR"):
-				return strings.Join(output, "\n"), ErrATErrorResponse
+				return strings.Join(output, "\n"), strings.Join(output[:len(output)-1], "\n"), ErrATErrorResponse
 			}
 		}
 	}
 
-	return strings.Join(output, "\n"), fmt.Errorf("timeout waiting for response")
+	return strings.Join(output, "\n"), "", fmt.Errorf("timeout waiting for response")
 }

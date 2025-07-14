@@ -21,7 +21,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net"
 	"os/exec"
 	"strings"
@@ -158,23 +157,24 @@ MainModemLoop:
 
 		// =========== Finding modem ===========
 		printSetupStep(2, "Finding USB modem.")
-		// TODO use getUSBVendorProductIDs instead
 		findingModemTimeout := time.Now().Add(mc.FindModemDuration)
+		productID := ""
 	FindModemLoop:
 		for {
-			// Search for the modem using `lsusb`
-			out, err := exec.Command("lsusb").Output()
+			vendorProductIDs, err := getUSBVendorProductIDs()
 			if err != nil {
 				log.Errorf("Failed to list usb devices: %v", err)
 			}
-			strOut := string(out)
-			// For each modem in the config see if it can be found from the lsusb output.
+
+			// Loop through the different modems that we support (just the one for now) to see if we can find the modem
 			for _, modemConfig := range mc.ModemsConfig {
-				searchStr := fmt.Sprintf("ID %s:", modemConfig.VendorID)
-				if strings.Contains(strOut, searchStr) {
-					log.Infof("Found modem with vendorID '%s'", modemConfig.VendorID)
-					mc.Modem = NewModem(modemConfig)
-					break FindModemLoop
+				for _, vendorProductID := range vendorProductIDs {
+					if modemConfig.VendorID == vendorProductID.VendorID {
+						log.Infof("Found modem with vendorID '%s'", modemConfig.VendorID)
+						mc.Modem = NewModem(modemConfig)
+						productID = vendorProductID.ProductID
+						break FindModemLoop
+					}
 				}
 			}
 
@@ -216,7 +216,7 @@ MainModemLoop:
 			_, err := mc.Modem.ATManager.request("AT", 1000, 0)
 			if err == nil {
 				log.Println("AT command responding.")
-				mc.Modem.ATReady = true // TODO, check if I need this variable anymore
+				mc.Modem.ATReady = true
 				break
 			}
 
@@ -249,38 +249,44 @@ MainModemLoop:
 
 		// ========== Checking that the modem is in the correct mode ==========
 		printSetupStep(5, "Checking that the modem is in the correct mode.")
-		//TODO, check first against the USB mode from first finding the modem.
-		vendorProductIDs, err := getUSBVendorProductIDs()
-		if err != nil {
-			log.Errorf("Failed to get USB vendor product IDs: %v", err)
-			return err
-		}
-		foundModem := false
-		for _, vendorProductID := range vendorProductIDs {
-			if vendorProductID.VendorID == mc.Modem.VendorID {
-				foundModem = true
-				if vendorProductID.ProductID == mc.Modem.ProductID {
-					log.Infof("Modem is in the correct mode. '%s'", vendorProductID.ProductID)
-					break
-				} else {
-					log.Infof("Modem is not in the correct mode. '%s' != '%s'", vendorProductID.ProductID, mc.Modem.ProductID)
-					log.Infof("Moving modem to the new mode '%s'", mc.Modem.ProductID)
-					err := mc.SetUSBMode(mc.Modem.ProductID)
-					if err != nil {
-						log.Errorf("Failed to set USB mode: %v", err)
-					}
-					log.Infof("Turning off then restarting connecting to modem.")
-					mc.SetModemPower(false)
-					// After trying to set the USB mode, wait 5 seconds then start over.
-					time.Sleep(5 * time.Second)
+		if productID == mc.Modem.ProductID {
+			log.Infof("Modem is in the correct mode. '%s'", productID)
+		} else {
+			log.Infof("Modem is not in the correct mode. '%s' != '%s'", productID, mc.Modem.ProductID)
+			log.Infof("Moving modem to the new mode '%s'", mc.Modem.ProductID)
+			err := mc.SetUSBMode(mc.Modem.ProductID)
+			if err != nil {
+				log.Errorf("Failed to set USB mode: %v", err)
+			}
+
+			// Trigger reset with AT+CRESET
+			_, err = mc.RunATCommand("AT+CRESET", 2000, 3)
+			if err != nil {
+				log.Errorf("Failed to reset modem: %v", err)
+			}
+
+			// Wait for modem to go offline then back online with the correct product ID
+			modemOffBackUpTimeout := time.Now().Add(time.Minute)
+			for {
+				if time.Now().After(modemOffBackUpTimeout) {
+					log.Error("Failed to find modem in given time after changing USB mode.")
+					// TODO, how should I try to recover from this?
 					continue MainModemLoop
 				}
+
+				vendorProductIDs, err := getUSBVendorProductIDs()
+				if err != nil {
+					log.Errorf("Failed to get USB vendor product IDs: %v", err)
+					time.Sleep(time.Second)
+					continue
+				}
+				for _, vendorProductID := range vendorProductIDs {
+					if vendorProductID.VendorID == mc.Modem.VendorID && vendorProductID.ProductID == mc.Modem.ProductID {
+						log.Infof("Modem is back online with correct product ID. '%s'", mc.Modem.ProductID)
+						continue MainModemLoop
+					}
+				}
 			}
-		}
-		if !foundModem {
-			log.Errorf("Modem with vendorID '%s' was not found.", mc.Modem.VendorID)
-			log.Errorf("Modem was already found on the USB bus so this might indicate a USB connection error.")
-			continue MainModemLoop
 		}
 
 		// =========== Checking SIM card in modem ===========
@@ -291,7 +297,11 @@ MainModemLoop:
 				mc.Modem.SimCardStatus = SimCardReady
 				break
 			}
-			log.Infof("SIM card not ready. Will try %d more time(s) to find SIM card", retries)
+			if err != nil {
+				log.Errorf("Failed to check SIM card: %v", err)
+				break
+			}
+			log.Infof("SIM card not ready. Will try %d more time(s) to find SIM card, current status: %s", retries, simStatus)
 			time.Sleep(time.Second)
 		}
 		if mc.Modem.SimCardStatus != SimCardReady {
@@ -315,6 +325,7 @@ MainModemLoop:
 				makeModemEvent("modemSignal", &mc)
 				break
 			}
+			log.Debugf("Signal strength not found, waiting 3 seconds then looking again.")
 			time.Sleep(3 * time.Second)
 
 			if time.Now().After(getSignalStrengthTimeout) {
@@ -329,7 +340,7 @@ MainModemLoop:
 		printSetupStep(8, "Checking that the network is up.")
 		networkUpTimeout := time.Now().Add(2 * time.Minute)
 		for {
-			if networkUpTimeout.After(time.Now()) {
+			if time.Now().After(networkUpTimeout) {
 				// Took too long to find the network, try from the start again.
 				makeModemEvent("noModemNetwork", &mc)
 				log.Errorf("Took too long to find the network.")
@@ -338,6 +349,7 @@ MainModemLoop:
 
 			iface, err := net.InterfaceByName(mc.Modem.Netdev)
 			if err != nil {
+				log.Debugf("Network interface not found, waiting a second then looking again. Error: %v", err)
 				// Network is not up yet, wait a second then look again.
 				time.Sleep(time.Second)
 				continue
@@ -369,7 +381,7 @@ MainModemLoop:
 				continue MainModemLoop
 			}
 
-			if pingingTimeout.After(time.Now()) {
+			if time.Now().After(pingingTimeout) {
 				// Took too long to ping, try from the start again.
 				makeModemEvent("noModemPing", &mc)
 				log.Errorf("Took too long to ping.")
@@ -392,14 +404,20 @@ MainModemLoop:
 
 		// ========== Running regular ping tests =============
 		log.Infof("Running ping tests every %s.", mc.TestInterval)
-		// TODO: Only shutdown modem when it fails to ping multiple times.
+		pingFailCount := 0
 		for {
 			time.Sleep(mc.TestInterval)
 			log.Debug("Running a regular ping test.")
 			if mc.PingTest(5000) {
 				mc.lastSuccessfulPing = time.Now()
+				pingFailCount = 0
 			} else {
-				log.Println("ping test failed")
+				pingFailCount++
+				log.Infof("Ping test failed %d times in a row.", pingFailCount)
+			}
+
+			if pingFailCount > 3 {
+				log.Infof("Ping test failed %d times in a row. Reporting failure.", pingFailCount)
 				mc.lastFailedConnection = time.Now()
 				continue MainModemLoop
 			}

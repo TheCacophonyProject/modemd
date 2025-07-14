@@ -1,14 +1,14 @@
-# Match SIMCom 7600 USB devices (AT / MBIM / ECM)
-ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ACTION=="add", SUBSYSTEM=="tty", ENV{SIMCOM_MODEM}="1"
-ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9011", ACTION=="add", SUBSYSTEM=="tty", ENV{SIMCOM_MODEM}="1"
-ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9018", ACTION=="add", SUBSYSTEM=="tty", ENV{SIMCOM_MODEM}="1"
+# Rules for modem in 9001 mode, default mode the modem comes in.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{MODEM_9001}="1"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9001}=="1", ATTRS{bInterfaceNumber}=="02", SYMLINK+="UsbModemAT"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9001}=="1", ATTRS{bInterfaceNumber}=="03", SYMLINK+="UsbModemAT2"
 
-# Extra steps for ECM mode (PID 9018) — only if not auto-handled
-ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9018", \
-  ACTION=="add", SUBSYSTEM=="tty", \
-  RUN+="/sbin/modprobe option", \
-  RUN+="/bin/sh -c 'echo 1e0e 9018 > /sys/bus/usb-serial/drivers/option1/new_id'"
+# Rules for Modem in 9011 mode, previous mode we were using the modem in.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9011", ENV{MODEM_9011}="1"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9011}=="1", ATTRS{bInterfaceNumber}=="04", SYMLINK+="UsbModemAT"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9011}=="1", ATTRS{bInterfaceNumber}=="05", SYMLINK+="UsbModemAT2"
 
-# Create convenience symlinks for known interface numbers
-ACTION=="add", SUBSYSTEM=="tty", ENV{SIMCOM_MODEM}=="1", ATTRS{bInterfaceNumber}=="02", SYMLINK+="UsbModemAT"
-ACTION=="add", SUBSYSTEM=="tty", ENV{SIMCOM_MODEM}=="1", ATTRS{bInterfaceNumber}=="03", SYMLINK+="UsbModemAT2"
+# Rule for Modem in 9018 mode, new mode we want to be using the modem in.
+ACTION=="add", SUBSYSTEM=="tty", ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9018", ENV{MODEM_9018}="1"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9018}=="1", ATTRS{bInterfaceNumber}=="02", SYMLINK+="UsbModemAT"
+ACTION=="add", SUBSYSTEM=="tty", ENV{MODEM_9018}=="1", ATTRS{bInterfaceNumber}=="03", SYMLINK+="UsbModemAT2"
