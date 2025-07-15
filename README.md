@@ -13,6 +13,9 @@ Licence | GNU General Public License v3.0 |
 
 Download and install the latest release from [Github](https://github.com/TheCacophonyProject/modemd/releases).  Then restart the device.
 
+`options usbserial vendor=0x1e0e product=0x9018`  will be need to be placed in `/etc/modprobe.d/usbserial.conf`
+This file was managed by salt instead of the deb package so when it was updated we could trigger the raspberry pi to restart.
+
 ## Development Instructions
 
 Follow our [go instructions](https://docs.cacophony.org.nz/home/developing-in-go) to download and build this project.
