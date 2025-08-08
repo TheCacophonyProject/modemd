@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -551,9 +552,13 @@ func (mc *ModemController) readBand() (string, error) {
 }
 
 func (mc *ModemController) RunATCommand(atCommand string, timeoutMsec int, attempts int) (string, error) {
+	if mc.Modem == nil {
+		return "", errors.New("modem not connected")
+	}
+	if mc.Modem.ATManager == nil {
+		return "", errors.New("modem AT manager not ready")
+	}
 	return mc.Modem.ATManager.request(atCommand, timeoutMsec, attempts)
-	//_, out, err := mc.RunATCommandTotalOutput(atCommand, timeoutMsec, attempts)
-	//return out, err
 }
 
 func (mc *ModemController) SetUSBMode(mode string) error {
@@ -702,7 +707,7 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 	}
 
 	if mc.Modem != nil && mc.Modem.SimCardStatus == SimCardFailed {
-		return false, "Modem should be off because it failed to find a SIM card."
+		return false, fmt.Sprintf("Modem should be off because it failed to find a SIM card. SIM status: %s.", mc.Modem.SimCardStatus)
 	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {

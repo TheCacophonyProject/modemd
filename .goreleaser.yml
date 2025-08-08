@@ -14,7 +14,6 @@ builds:
     goos:
       - linux
     goarch:
-      - arm
       - arm64
     goarm:
       - "7"
@@ -26,7 +25,6 @@ builds:
     goos:
       - linux
     goarch:
-      - arm
       - arm64
     goarm:
       - "7"
@@ -38,7 +36,6 @@ builds:
     goos:
       - linux
     goarch:
-      - arm
       - arm64
     goarm:
       - "7"

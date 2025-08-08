@@ -156,6 +156,18 @@ MainModemLoop:
 		}
 
 		// =========== Finding modem ===========
+		// Failed to find the modem so we shouldn't try to find it again.
+		if mc.failedToFindModem {
+			log.Info("Failed to find the USB modem. Not trying to find it again.")
+			// Wait until the modem doesn't need to be on again.
+			// We just wait here so the modem status can still be queried.
+			for {
+				if !mc.ShouldBeOn() {
+					continue MainModemLoop
+				}
+				time.Sleep(time.Second)
+			}
+		}
 		printSetupStep(2, "Finding USB modem.")
 		findingModemTimeout := time.Now().Add(mc.FindModemDuration)
 		productID := ""
@@ -290,6 +302,17 @@ MainModemLoop:
 		}
 
 		// =========== Checking SIM card in modem ===========
+		// If the modem failed to find a SIM card, then we shouldn't try to find it again.
+		if mc.failedToFindSimCard {
+			log.Info("Modem failed to find a SIM card. Will not try to find it again.")
+			// We just wait here so the modem status can still be queried.
+			for {
+				if !mc.ShouldBeOn() {
+					continue MainModemLoop
+				}
+				time.Sleep(time.Second)
+			}
+		}
 		printSetupStep(6, "Checking SIM card.")
 		for retries := 30; retries > 0; retries-- {
 			simStatus, err := mc.CheckSimCard()
