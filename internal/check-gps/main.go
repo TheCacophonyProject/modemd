@@ -1,13 +1,16 @@
-package main
+package checkgps
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/TheCacophonyProject/go-utils/logging"
+	"github.com/alexflint/go-arg"
 	"github.com/tarm/serial"
 )
 
@@ -22,7 +25,45 @@ type gpsData struct {
 	course      float64
 }
 
-func main() {
+type Args struct {
+	logging.LogArgs
+}
+
+func (Args) Version() string {
+	return version
+}
+
+var defaultArgs = Args{}
+var version = "<not set>"
+
+func procArgs(input []string) (Args, error) {
+	args := defaultArgs
+
+	parser, err := arg.NewParser(arg.Config{}, &args)
+	if err != nil {
+		return Args{}, err
+	}
+	err = parser.Parse(input)
+	if errors.Is(err, arg.ErrHelp) {
+		parser.WriteHelp(os.Stdout)
+		os.Exit(0)
+	}
+	if errors.Is(err, arg.ErrVersion) {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+	return args, err
+}
+
+func Run(inputArgs []string, ver string) error {
+	version = ver
+	args, err := procArgs(inputArgs)
+	if err != nil {
+		return fmt.Errorf("failed to parse args: %v", err)
+	}
+	log = logging.NewLogger(args.LogLevel)
+
+	log.Infof("Running version: %s", version)
 
 	log.Println("Checking if GPS is enabled")
 	out, err := runATCommand("AT+CGPS?")

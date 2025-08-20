@@ -1,19 +1,59 @@
-package main
+package receptionlogger
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/TheCacophonyProject/go-utils/logging"
+	"github.com/alexflint/go-arg"
 	"github.com/tarm/serial"
 )
 
 var log = logging.NewLogger("info")
+var version = "<not set>"
 
-func main() {
+type Args struct {
+	logging.LogArgs
+}
+
+func (Args) Version() string {
+	return version
+}
+
+var defaultArgs = Args{}
+
+func procArgs(input []string) (Args, error) {
+	args := defaultArgs
+
+	parser, err := arg.NewParser(arg.Config{}, &args)
+	if err != nil {
+		return Args{}, err
+	}
+	err = parser.Parse(input)
+	if errors.Is(err, arg.ErrHelp) {
+		parser.WriteHelp(os.Stdout)
+		os.Exit(0)
+	}
+	if errors.Is(err, arg.ErrVersion) {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+	return args, err
+}
+
+func Run(inputArgs []string, ver string) error {
+	version = ver
+	args, err := procArgs(inputArgs)
+	if err != nil {
+		return fmt.Errorf("failed to parse args: %v", err)
+	}
+	log = logging.NewLogger(args.LogLevel)
+
+	log.Infof("Running version: %s", version)
 	for {
 		_, err := runATCommand("AT")
 		if err != nil {

@@ -10,39 +10,16 @@ release:
   name_template: '{{.Tag}}'
 
 builds:
-  - id: modemd
+  - id: modem-tools
     goos:
       - linux
     goarch:
       - arm64
     goarm:
       - "7"
-    main: ./cmd/modemd
+    main: ./cmd/modem-tools
     ldflags: -s -w -X main.version={{.Version}}
-    binary: modemd
-
-  - id: reception-logger
-    goos:
-      - linux
-    goarch:
-      - arm64
-    goarm:
-      - "7"
-    main: ./cmd/reception-logger
-    ldflags: -s -w -X main.version={{.Version}}
-    binary: reception-logger
-
-  - id: modem-cli
-    goos:
-      - linux
-    goarch:
-      - arm64
-    goarm:
-      - "7"
-    main: ./cmd/modem-cli
-    ldflags: -s -w -X main.version={{.Version}}
-    binary: modem-cli
-
+    binary: modem-tools
 
 nfpms:
   - vendor: The Cacophony Project
@@ -63,6 +40,14 @@ nfpms:
         dst: /etc/udev/rules.d/99-modem-udev.rules
       - src: _release/usbserial.conf
         dst: /etc/modules-load.d/usbserial.conf
+      - src: _release/check-gps
+        dst: /usr/bin/check-gps
+      - src: _release/modem-cli
+        dst: /usr/bin/modem-cli
+      - src: _release/modemd
+        dst: /usr/bin/modemd
+      - src: _release/reception-logger
+        dst: /usr/bin/reception-logger
     scripts:
       postinstall: "_release/postinstall.sh"
 
