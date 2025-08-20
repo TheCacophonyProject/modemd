@@ -1,7 +1,9 @@
-package main
+package modemcli
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -22,6 +24,10 @@ type Args struct {
 	logging.LogArgs
 }
 
+func (Args) Version() string {
+	return version
+}
+
 type atSubcommand struct {
 	Cmd string `arg:"required" help:"AT command to send"`
 }
@@ -39,34 +45,40 @@ type powerOffOnSubcommand struct {
 type subcommand struct {
 }
 
-func (Args) Version() string {
-	return version
-}
-
-func procArgs() Args {
-	args := Args{
-		ConfigDir: config.DefaultConfigDir,
-	}
-	arg.MustParse(&args)
-	return args
-}
-
 var version = "<not set>"
 var log = logging.NewLogger("info")
-
-func main() {
-	err := runMain()
-	if err != nil {
-		log.Fatal(err)
-	}
+var defaultArgs = Args{
+	ConfigDir: config.DefaultConfigDir,
 }
 
-func runMain() error {
-	args := procArgs()
+func procArgs(input []string) (Args, error) {
+	args := defaultArgs
 
+	parser, err := arg.NewParser(arg.Config{}, &args)
+	if err != nil {
+		return Args{}, err
+	}
+	err = parser.Parse(input)
+	if errors.Is(err, arg.ErrHelp) {
+		parser.WriteHelp(os.Stdout)
+		os.Exit(0)
+	}
+	if errors.Is(err, arg.ErrVersion) {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+	return args, err
+}
+
+func Run(inputArgs []string, ver string) error {
+	version = ver
+	args, err := procArgs(inputArgs)
+	if err != nil {
+		return fmt.Errorf("failed to parse args: %v", err)
+	}
 	log = logging.NewLogger(args.LogLevel)
 
-	log.Printf("Running version: %s", version)
+	log.Infof("Running version: %s", version)
 
 	if args.ATCmd != nil {
 		return runAT(args.ATCmd)
