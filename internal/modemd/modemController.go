@@ -19,9 +19,11 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package modemd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -632,6 +634,10 @@ func setUSBPower(enable bool) error {
 		log.Println("Enabling USB power")
 		writeVal = []byte("1")
 	} else {
+		if wifiDonglePresent() {
+			log.Println("Wi-Fi dongle detected; skipping USB power disable")
+			return nil
+		}
 		log.Println("Disabling USB power")
 		writeVal = []byte("0")
 	}
@@ -676,6 +682,30 @@ func setUSBPower(enable bool) error {
 		}()
 	}
 	return nil
+}
+
+func wifiDonglePresent() bool {
+	for _, name := range []string{"wlan1", "wlan2"} {
+		if _, err := net.InterfaceByName(name); err == nil {
+			return true
+		}
+	}
+
+	out, err := exec.Command("lsusb").CombinedOutput()
+	if err != nil {
+		log.Printf("failed to run lsusb while checking for Wi-Fi dongle: %v", err)
+		return false
+	}
+	knownSignatures := [][]byte{
+		[]byte("2357:011e"), // TP-Link Archer T2U Nano
+		[]byte("TP-Link"),
+	}
+	for _, sig := range knownSignatures {
+		if bytes.Contains(out, sig) {
+			return true
+		}
+	}
+	return false
 }
 
 func (mc *ModemController) CycleModemPower() error {
