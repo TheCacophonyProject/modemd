@@ -2,6 +2,8 @@ package modemd
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -81,6 +83,83 @@ func TestShouldBeOnRetriesAfterSimCardFailure(t *testing.T) {
 	mc.lastFailedSimCard = time.Now().Add(-121 * time.Minute)
 	if on, reason := mc.shouldBeOnWithReason(); !on {
 		t.Fatalf("expected modem to be allowed on after the retry interval: %s", reason)
+	}
+}
+
+func TestShouldBeOnGivesUpAfterSimCardFailsInARow(t *testing.T) {
+	mc := ModemController{
+		RetrySimCardInterval: 2 * time.Hour,
+		StartTime:            time.Now(),
+		InitialOnDuration:    24 * time.Hour,
+	}
+	mc.failedToFindSimCard = true
+	mc.lastFailedSimCard = time.Now().Add(-3 * time.Hour)
+
+	mc.simCardFailsInARow = maxSimCardFailsInARow - 1
+	if on, reason := mc.shouldBeOnWithReason(); !on {
+		t.Fatalf("expected modem to retry after the retry interval before giving up: %s", reason)
+	}
+
+	mc.simCardFailsInARow = maxSimCardFailsInARow
+	if on, reason := mc.shouldBeOnWithReason(); on {
+		t.Fatalf("expected modem to stay off after failing %d times in a row: %s", maxSimCardFailsInARow, reason)
+	}
+	if !mc.waitingToRetrySimCard() {
+		t.Fatal("expected to keep waiting to retry the SIM card after giving up")
+	}
+
+	// A stay-on request still turns the modem on, but the SIM card isn't checked again.
+	mc.stayOnUntil = time.Now().Add(time.Hour)
+	if on, reason := mc.shouldBeOnWithReason(); !on {
+		t.Fatalf("expected a stay-on request to override giving up: %s", reason)
+	}
+	if !mc.waitingToRetrySimCard() {
+		t.Fatal("expected not to retry the SIM card during a stay-on request after giving up")
+	}
+}
+
+func TestSimCardFailsInARowSavedAndLoaded(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "modemd", "sim-card-fails")
+	if fails := loadSimCardFailsInARow(path); fails != 0 {
+		t.Fatalf("expected 0 when the file doesn't exist, got %d", fails)
+	}
+
+	saveSimCardFailsInARow(path, maxSimCardFailsInARow)
+	if fails := loadSimCardFailsInARow(path); fails != maxSimCardFailsInARow {
+		t.Fatalf("expected %d, got %d", maxSimCardFailsInARow, fails)
+	}
+
+	if err := os.WriteFile(path, []byte("not a number"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if fails := loadSimCardFailsInARow(path); fails != 0 {
+		t.Fatalf("expected 0 for an invalid file, got %d", fails)
+	}
+}
+
+func TestSimCardRetriedOnceAfterRestartWhenGaveUp(t *testing.T) {
+	// After a restart the saved count is loaded, but nothing has failed yet this run.
+	mc := ModemController{RetrySimCardInterval: 2 * time.Hour}
+	mc.simCardFailsInARow = maxSimCardFailsInARow
+	if mc.waitingToRetrySimCard() {
+		t.Fatal("expected the SIM card to be checked once after a restart")
+	}
+	if attempts := mc.simCardPowerOnAttemptsAllowed(); attempts != 1 {
+		t.Fatalf("expected 1 power on attempt after giving up, got %d", attempts)
+	}
+
+	mc.simCardFailsInARow = maxSimCardFailsInARow - 1
+	if attempts := mc.simCardPowerOnAttemptsAllowed(); attempts != simCardPowerOnAttempts {
+		t.Fatalf("expected %d power on attempts before giving up, got %d", simCardPowerOnAttempts, attempts)
+	}
+	mc.simCardFailsInARow = maxSimCardFailsInARow
+
+	// One more failure and it gives up again straight away.
+	mc.failedToFindSimCard = true
+	mc.lastFailedSimCard = time.Now().Add(-3 * time.Hour)
+	mc.simCardFailsInARow++
+	if !mc.waitingToRetrySimCard() {
+		t.Fatal("expected to give up again after failing once after a restart")
 	}
 }
 

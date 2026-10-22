@@ -136,6 +136,11 @@ func Run(inputArgs []string, ver string) error {
 		MaxOffDuration:         conf.MaxOffDuration,
 	}
 
+	mc.simCardFailsInARow = loadSimCardFailsInARow(simCardFailsFile)
+	if mc.simCardFailsInARow > 0 {
+		log.Infof("Previously failed to find a SIM card %d times in a row.", mc.simCardFailsInARow)
+	}
+
 	log.Println("Starting dbus service.")
 	if err := startService(&mc); err != nil {
 		return err
@@ -320,7 +325,11 @@ MainModemLoop:
 		// =========== Checking SIM card in modem ===========
 		// If the modem failed to find a SIM card recently, then we shouldn't try to find it again yet.
 		if mc.waitingToRetrySimCard() {
-			log.Infof("Modem failed to find a SIM card. Will not try to find it again until %v has passed.", mc.RetrySimCardInterval)
+			if mc.gaveUpOnSimCard() {
+				log.Infof("Modem failed to find a SIM card %d times in a row. Will not try to find it again until modemd restarts.", mc.simCardFailsInARow)
+			} else {
+				log.Infof("Modem failed to find a SIM card. Will not try to find it again until %v has passed.", mc.RetrySimCardInterval)
+			}
 			// We just wait here so the modem status can still be queried.
 			for mc.ShouldBeOn() && mc.waitingToRetrySimCard() {
 				time.Sleep(time.Second)
@@ -328,12 +337,12 @@ MainModemLoop:
 			continue MainModemLoop
 		}
 		simCardAttempts++
-		printSetupStep(6, fmt.Sprintf("Checking SIM card (power on attempt %d of %d).", simCardAttempts, simCardPowerOnAttempts))
+		printSetupStep(6, fmt.Sprintf("Checking SIM card (power on attempt %d of %d).", simCardAttempts, mc.simCardPowerOnAttemptsAllowed()))
 		if waitForSimCard(mc.CheckSimCard, simCardCheckTimeout, simCardCheckInterval) {
 			mc.Modem.SimCardStatus = SimCardReady
 		}
 		if mc.Modem.SimCardStatus != SimCardReady {
-			if simCardAttempts < simCardPowerOnAttempts {
+			if simCardAttempts < mc.simCardPowerOnAttemptsAllowed() {
 				log.Info("SIM card not found. Cycling modem power to try again.")
 				if err := mc.SetModemPower(false); err != nil {
 					return err
@@ -346,10 +355,21 @@ MainModemLoop:
 			makeModemEvent("noModemSimCard", &mc)
 			mc.failedToFindSimCard = true
 			mc.lastFailedSimCard = time.Now()
+			mc.simCardFailsInARow++
+			saveSimCardFailsInARow(simCardFailsFile, mc.simCardFailsInARow)
+			if mc.gaveUpOnSimCard() {
+				log.Infof("Failed to find a SIM card %d times in a row. Will not try again until modemd restarts.", mc.simCardFailsInARow)
+			} else {
+				log.Infof("Failed to find a SIM card (%d of %d times in a row before giving up until modemd restarts).", mc.simCardFailsInARow, maxSimCardFailsInARow)
+			}
 			continue MainModemLoop // Go back to start of main loop.
 		}
 		simCardAttempts = 0
 		mc.failedToFindSimCard = false
+		if mc.simCardFailsInARow != 0 {
+			mc.simCardFailsInARow = 0
+			saveSimCardFailsInARow(simCardFailsFile, 0)
+		}
 		log.Info("SIM card ready.")
 
 		// ========== Checking signal strength ===========

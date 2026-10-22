@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -68,6 +69,7 @@ type ModemController struct {
 
 	failedToFindModem   bool
 	failedToFindSimCard bool
+	simCardFailsInARow  int // Saved to simCardFailsFile so it carries over when modemd restarts.
 }
 
 const PinEnableModem = "GPIO22"
@@ -508,7 +510,42 @@ const (
 	// How long to keep the modem off after failing to find a SIM card. This is longer than
 	// RetryInterval so cameras without a SIM card don't keep powering on the modem.
 	retrySimCardInterval = 2 * time.Hour
+	// After failing to find a SIM card this many times in a row, stop trying until modemd restarts
+	// (e.g. the camera reboots). The camera most likely has no SIM card, so this saves power.
+	// The count is saved, so after a restart it only tries once more before giving up again.
+	maxSimCardFailsInARow = 3
+	simCardFailsFile      = "/var/lib/modemd/sim-card-fails"
 )
+
+// loadSimCardFailsInARow reads how many times in a row the SIM card failed to be found.
+// A missing or invalid file counts as 0.
+func loadSimCardFailsInARow(path string) int {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		log.Errorf("Failed to read SIM card fail count from '%s': %v", path, err)
+		return 0
+	}
+	fails, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		log.Errorf("Invalid SIM card fail count in '%s': %v", path, err)
+		return 0
+	}
+	return fails
+}
+
+// saveSimCardFailsInARow saves how many times in a row the SIM card failed to be found.
+func saveSimCardFailsInARow(path string, fails int) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		log.Errorf("Failed to create directory for SIM card fail count: %v", err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(strconv.Itoa(fails)), 0644); err != nil {
+		log.Errorf("Failed to save SIM card fail count to '%s': %v", path, err)
+	}
+}
 
 // waitForSimCard calls checkSim until it reports the SIM card as READY or the timeout passes.
 // Some modems take a while after starting up before they can read the SIM card, and return
@@ -534,9 +571,28 @@ func (mc *ModemController) waitingToRetryFindModem() bool {
 	return mc.failedToFindModem && time.Since(mc.lastFailedFindModem) < mc.RetryFindModemInterval
 }
 
-// waitingToRetrySimCard returns true if no SIM card was found and it's too soon to try again.
+// gaveUpOnSimCard returns true if the SIM card has failed to be found too many times in a row,
+// so it shouldn't be tried again until modemd restarts.
+func (mc *ModemController) gaveUpOnSimCard() bool {
+	return mc.simCardFailsInARow >= maxSimCardFailsInARow
+}
+
+// simCardPowerOnAttemptsAllowed returns how many times to power on the modem to look for the SIM card.
+// After giving up on the SIM card (e.g. when checking once after a restart) it only powers on once.
+func (mc *ModemController) simCardPowerOnAttemptsAllowed() int {
+	if mc.gaveUpOnSimCard() {
+		return 1
+	}
+	return simCardPowerOnAttempts
+}
+
+// waitingToRetrySimCard returns true if no SIM card was found and it's too soon to try again,
+// or it has given up on finding the SIM card.
 func (mc *ModemController) waitingToRetrySimCard() bool {
-	return mc.failedToFindSimCard && time.Since(mc.lastFailedSimCard) < mc.RetrySimCardInterval
+	if !mc.failedToFindSimCard {
+		return false
+	}
+	return mc.gaveUpOnSimCard() || time.Since(mc.lastFailedSimCard) < mc.RetrySimCardInterval
 }
 
 func (mc *ModemController) signalStrength() (int, int, string, error) {
@@ -772,6 +828,10 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 
 	if mc.waitingToRetryFindModem() {
 		return false, fmt.Sprintf("Modem should be off because it could not be found. Will retry after %v.", mc.RetryFindModemInterval)
+	}
+
+	if mc.failedToFindSimCard && mc.gaveUpOnSimCard() {
+		return false, fmt.Sprintf("Modem should be off because it failed to find a SIM card %d times in a row. Will not retry until modemd restarts.", mc.simCardFailsInARow)
 	}
 
 	if mc.waitingToRetrySimCard() {
