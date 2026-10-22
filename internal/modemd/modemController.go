@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -51,21 +52,24 @@ type ModemController struct {
 	RequestOnDuration      time.Duration // Time the modem will stay on in seconds after a request was made
 	RetryInterval          time.Duration
 	RetryFindModemInterval time.Duration
+	RetrySimCardInterval   time.Duration // Time to wait before trying again after failing to find a SIM card
 	MaxOffDuration         time.Duration
 	MinConnDuration        time.Duration
 
 	lastOnRequestTime    time.Time
 	lastSuccessfulPing   time.Time
 	lastFailedConnection time.Time
-	//lastFailedFindModem  time.Time
-	connectedTime time.Time
-	stayOnUntil   time.Time
-	stayOffUntil  time.Time
-	onOffReason   string
-	IsPowered     bool
+	lastFailedFindModem  time.Time
+	lastFailedSimCard    time.Time
+	connectedTime        time.Time
+	stayOnUntil          time.Time
+	stayOffUntil         time.Time
+	onOffReason          string
+	IsPowered            bool
 
 	failedToFindModem   bool
 	failedToFindSimCard bool
+	simCardFailsInARow  int // Saved to simCardFailsFile so it carries over when modemd restarts.
 }
 
 const PinEnableModem = "GPIO22"
@@ -497,6 +501,100 @@ func (mc *ModemController) CheckSimCard() (string, error) {
 	return out, nil
 }
 
+const (
+	// How long to keep checking for the SIM card after each modem power on.
+	simCardCheckTimeout  = 90 * time.Second
+	simCardCheckInterval = 5 * time.Second
+	// How many times to power on the modem and check for the SIM card before giving up.
+	simCardPowerOnAttempts = 3
+	// How long to keep the modem off after failing to find a SIM card. This is longer than
+	// RetryInterval so cameras without a SIM card don't keep powering on the modem.
+	retrySimCardInterval = 2 * time.Hour
+	// After failing to find a SIM card this many times in a row, stop trying until modemd restarts
+	// (e.g. the camera reboots). The camera most likely has no SIM card, so this saves power.
+	// The count is saved, so after a restart it only tries once more before giving up again.
+	maxSimCardFailsInARow = 3
+	simCardFailsFile      = "/var/lib/modemd/sim-card-fails"
+)
+
+// loadSimCardFailsInARow reads how many times in a row the SIM card failed to be found.
+// A missing or invalid file counts as 0.
+func loadSimCardFailsInARow(path string) int {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
+	if err != nil {
+		log.Errorf("Failed to read SIM card fail count from '%s': %v", path, err)
+		return 0
+	}
+	fails, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		log.Errorf("Invalid SIM card fail count in '%s': %v", path, err)
+		return 0
+	}
+	return fails
+}
+
+// saveSimCardFailsInARow saves how many times in a row the SIM card failed to be found.
+func saveSimCardFailsInARow(path string, fails int) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		log.Errorf("Failed to create directory for SIM card fail count: %v", err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(strconv.Itoa(fails)), 0644); err != nil {
+		log.Errorf("Failed to save SIM card fail count to '%s': %v", path, err)
+	}
+}
+
+// waitForSimCard calls checkSim until it reports the SIM card as READY or the timeout passes.
+// Some modems take a while after starting up before they can read the SIM card, and return
+// errors (e.g. "SIM busy") until then, so errors are retried too.
+func waitForSimCard(checkSim func() (string, error), timeout, interval time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		simStatus, err := checkSim()
+		if err == nil && simStatus == "READY" {
+			return true
+		}
+		if time.Now().Add(interval).After(deadline) {
+			log.Infof("SIM card not ready after %s. Last status: '%s', error: %v", timeout, simStatus, err)
+			return false
+		}
+		log.Infof("SIM card not ready (status: '%s', error: %v). Checking again in %s.", simStatus, err, interval)
+		time.Sleep(interval)
+	}
+}
+
+// waitingToRetryFindModem returns true if the modem couldn't be found and it's too soon to try again.
+func (mc *ModemController) waitingToRetryFindModem() bool {
+	return mc.failedToFindModem && time.Since(mc.lastFailedFindModem) < mc.RetryFindModemInterval
+}
+
+// gaveUpOnSimCard returns true if the SIM card has failed to be found too many times in a row,
+// so it shouldn't be tried again until modemd restarts.
+func (mc *ModemController) gaveUpOnSimCard() bool {
+	return mc.simCardFailsInARow >= maxSimCardFailsInARow
+}
+
+// simCardPowerOnAttemptsAllowed returns how many times to power on the modem to look for the SIM card.
+// After giving up on the SIM card (e.g. when checking once after a restart) it only powers on once.
+func (mc *ModemController) simCardPowerOnAttemptsAllowed() int {
+	if mc.gaveUpOnSimCard() {
+		return 1
+	}
+	return simCardPowerOnAttempts
+}
+
+// waitingToRetrySimCard returns true if no SIM card was found and it's too soon to try again,
+// or it has given up on finding the SIM card.
+func (mc *ModemController) waitingToRetrySimCard() bool {
+	if !mc.failedToFindSimCard {
+		return false
+	}
+	return mc.gaveUpOnSimCard() || time.Since(mc.lastFailedSimCard) < mc.RetrySimCardInterval
+}
+
 func (mc *ModemController) signalStrength() (int, int, string, error) {
 	out, err := mc.RunATCommand("AT+CSQ", 1000, 1)
 	if err != nil {
@@ -728,16 +826,16 @@ func (mc *ModemController) shouldBeOnWithReason() (bool, string) {
 		return true, fmt.Sprintf("Modem should be on because it was requested to stay on until %s.", mc.stayOnUntil.Format("2006-01-02 15:04:05"))
 	}
 
-	if mc.failedToFindModem {
-		return false, "Modem should be off because it could not be found on boot."
+	if mc.waitingToRetryFindModem() {
+		return false, fmt.Sprintf("Modem should be off because it could not be found. Will retry after %v.", mc.RetryFindModemInterval)
 	}
 
-	if mc.failedToFindSimCard {
-		return false, "Modem should be off because it could not find a SIM card."
+	if mc.failedToFindSimCard && mc.gaveUpOnSimCard() {
+		return false, fmt.Sprintf("Modem should be off because it failed to find a SIM card %d times in a row. Will not retry until modemd restarts.", mc.simCardFailsInARow)
 	}
 
-	if mc.Modem != nil && mc.Modem.SimCardStatus == SimCardFailed {
-		return false, fmt.Sprintf("Modem should be off because it failed to find a SIM card. SIM status: %s.", mc.Modem.SimCardStatus)
+	if mc.waitingToRetrySimCard() {
+		return false, fmt.Sprintf("Modem should be off because it could not find a SIM card. Will retry after %v.", mc.RetrySimCardInterval)
 	}
 
 	if time.Since(mc.lastFailedConnection) < mc.RetryInterval {
